@@ -21,25 +21,14 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $request->validate([
-            'name' => 'nullable|string',
-            'email' => 'nullable|string',
+            'name' => 'required|string',
             'password' => 'required|string',
             'guard' => 'nullable|string|in:admin,cashier_man,branch,kitchen',
         ]);
 
         $credentials = [];
-
-        if ($request->filled('email')) {
-            $credentials['email'] = $request->email;
-        } elseif ($request->filled('name')) {
-            $credentials['name'] = $request->name;
-        } else {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error: name or email is required.',
-            ], 422);
-        }
-
+ 
+        $credentials['name'] = $request->name; 
         $credentials['password'] = $request->password;
 
         $targetGuards = $request->filled('guard')
