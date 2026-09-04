@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -8,10 +8,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use PHPOpenSourceSaver\JWTAuth\JWTGuard;
 
+/**
+ * @tags Auth
+ */
 class AuthController extends Controller
 {
     /**
      * Get a JWT via given credentials.
+     *
+     * @unauthenticated
      */
     public function login(Request $request): JsonResponse
     {

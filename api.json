@@ -9,6 +9,11 @@
             "url": "http://localhost:8000/api"
         }
     ],
+    "security": [
+        {
+            "http": []
+        }
+    ],
     "paths": {
         "/docs": {
             "get": {
@@ -23,7 +28,8 @@
                             }
                         }
                     }
-                }
+                },
+                "security": []
             }
         },
         "/admin/admins/select-options": {
@@ -677,7 +683,8 @@
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
                     }
-                }
+                },
+                "security": []
             }
         },
         "/auth/me": {
@@ -6238,6 +6245,12 @@
         }
     },
     "components": {
+        "securitySchemes": {
+            "http": {
+                "type": "http",
+                "scheme": "bearer"
+            }
+        },
         "schemas": {
             "AdminResource": {
                 "type": "object",

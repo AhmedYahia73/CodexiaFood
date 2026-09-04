@@ -11,7 +11,7 @@ use App\Http\Controllers\api\admin\ExpenseListController;
 use App\Http\Controllers\api\admin\FinancialAccountController;
 use App\Http\Controllers\api\admin\HallController;
 use App\Http\Controllers\api\admin\HallTableController;
-use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\api\AuthController;
 use Illuminate\Support\Facades\Route;
 
 /*
