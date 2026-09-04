@@ -21,6 +21,7 @@ class ProductRecipe extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'status' => 'boolean',
             'stock' => 'integer',
         ];

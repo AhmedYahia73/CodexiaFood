@@ -15,6 +15,14 @@ class ExpenseList extends Model
         'description',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'name' => 'array',
+            'description' => 'array',
+        ];
+    }
+
     public function expenses(): HasMany
     {
         return $this->hasMany(Expense::class);

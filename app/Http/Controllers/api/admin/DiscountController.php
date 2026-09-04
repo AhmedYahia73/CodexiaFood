@@ -21,7 +21,9 @@ class DiscountController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'required|array:en,ar',
+            'name.en' => 'required|string|max:255',
+            'name.ar' => 'required|string|max:255',
             'type' => 'required|in:percentage,value',
             'amount' => 'required|numeric|min:0',
             'status' => 'nullable|boolean',
@@ -44,7 +46,9 @@ class DiscountController extends Controller
     public function update(Request $request, Discount $discount): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
+            'name' => 'sometimes|required|array:en,ar',
+            'name.en' => 'required_with:name|string|max:255',
+            'name.ar' => 'required_with:name|string|max:255',
             'type' => 'sometimes|required|in:percentage,value',
             'amount' => 'sometimes|required|numeric|min:0',
             'status' => 'nullable|boolean',

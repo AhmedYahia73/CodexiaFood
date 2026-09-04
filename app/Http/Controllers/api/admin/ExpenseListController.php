@@ -21,8 +21,12 @@ class ExpenseListController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'name' => 'required|array:en,ar',
+            'name.en' => 'required|string|max:255',
+            'name.ar' => 'required|string|max:255',
+            'description' => 'nullable|array:en,ar',
+            'description.en' => 'nullable|string',
+            'description.ar' => 'nullable|string',
         ]);
 
         $expenseList = ExpenseList::create($validated);
@@ -42,8 +46,12 @@ class ExpenseListController extends Controller
     public function update(Request $request, ExpenseList $expenseList): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'description' => 'nullable|string',
+            'name' => 'sometimes|required|array:en,ar',
+            'name.en' => 'required_with:name|string|max:255',
+            'name.ar' => 'required_with:name|string|max:255',
+            'description' => 'nullable|array:en,ar',
+            'description.en' => 'nullable|string',
+            'description.ar' => 'nullable|string',
         ]);
 
         $expenseList->update($validated);

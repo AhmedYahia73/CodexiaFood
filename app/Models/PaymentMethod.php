@@ -19,6 +19,8 @@ class PaymentMethod extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
+            'description' => 'array',
             'status' => 'boolean',
         ];
     }

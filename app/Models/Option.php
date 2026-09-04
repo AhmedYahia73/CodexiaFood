@@ -21,6 +21,7 @@ class Option extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'price' => 'decimal:2',
             'status' => 'boolean',
         ];

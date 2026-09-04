@@ -21,6 +21,7 @@ class Variation extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'status' => 'boolean',
             'required' => 'boolean',
         ];

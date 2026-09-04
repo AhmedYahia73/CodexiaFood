@@ -21,6 +21,7 @@ class FinancialAccount extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'balance' => 'decimal:2',
             'status' => 'boolean',
         ];

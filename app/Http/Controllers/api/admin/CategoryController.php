@@ -38,9 +38,13 @@ class CategoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'required|array:en,ar',
+            'name.en' => 'required|string|max:255',
+            'name.ar' => 'required|string|max:255',
             'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
-            'description' => 'nullable|string',
+            'description' => 'nullable|array:en,ar',
+            'description.en' => 'nullable|string',
+            'description.ar' => 'nullable|string',
             'category_id' => 'nullable|exists:categories,id',
             'type' => 'nullable|in:recipe,material,product',
             'status' => 'nullable|boolean',
@@ -81,9 +85,13 @@ class CategoryController extends Controller
     public function update(Request $request, Category $category): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
+            'name' => 'sometimes|required|array:en,ar',
+            'name.en' => 'required_with:name|string|max:255',
+            'name.ar' => 'required_with:name|string|max:255',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
-            'description' => 'nullable|string',
+            'description' => 'nullable|array:en,ar',
+            'description.en' => 'nullable|string',
+            'description.ar' => 'nullable|string',
             'category_id' => 'nullable|exists:categories,id',
             'type' => 'nullable|in:recipe,material,product',
             'status' => 'nullable|boolean',

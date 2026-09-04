@@ -36,7 +36,9 @@ class HallController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'required|array:en,ar',
+            'name.en' => 'required|string|max:255',
+            'name.ar' => 'required|string|max:255',
             'branch_id' => 'nullable|exists:branches,id',
             'status' => 'nullable|boolean',
         ]);
@@ -67,7 +69,9 @@ class HallController extends Controller
     public function update(Request $request, Hall $hall): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
+            'name' => 'sometimes|required|array:en,ar',
+            'name.en' => 'required_with:name|string|max:255',
+            'name.ar' => 'required_with:name|string|max:255',
             'branch_id' => 'nullable|exists:branches,id',
             'status' => 'nullable|boolean',
         ]);

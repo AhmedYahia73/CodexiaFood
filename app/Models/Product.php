@@ -24,6 +24,8 @@ class Product extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
+            'description' => 'array',
             'price' => 'decimal:2',
         ];
     }

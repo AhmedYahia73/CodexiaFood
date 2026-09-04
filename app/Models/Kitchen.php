@@ -34,6 +34,7 @@ class Kitchen extends Authenticatable implements JWTSubject
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'password' => 'hashed',
             'status' => 'boolean',
         ];

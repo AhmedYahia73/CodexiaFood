@@ -20,6 +20,7 @@ class Discount extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'amount' => 'decimal:2',
             'status' => 'boolean',
         ];

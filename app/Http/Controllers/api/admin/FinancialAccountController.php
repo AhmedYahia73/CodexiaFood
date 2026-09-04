@@ -39,7 +39,9 @@ class FinancialAccountController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'required|array:en,ar',
+            'name.en' => 'required|string|max:255',
+            'name.ar' => 'required|string|max:255',
             'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',
@@ -80,7 +82,9 @@ class FinancialAccountController extends Controller
     public function update(Request $request, FinancialAccount $financialAccount): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
+            'name' => 'sometimes|required|array:en,ar',
+            'name.en' => 'required_with:name|string|max:255',
+            'name.ar' => 'required_with:name|string|max:255',
             'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',

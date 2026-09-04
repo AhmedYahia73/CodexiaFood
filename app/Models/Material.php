@@ -21,6 +21,7 @@ class Material extends Model
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'stock' => 'integer',
             'status' => 'boolean',
         ];

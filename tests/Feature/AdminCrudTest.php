@@ -179,14 +179,15 @@ test('admin can perform CRUD on Category model with storage url image', function
 
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/categories', [
-            'name' => 'Drinks',
+            'name' => ['en' => 'Drinks', 'ar' => 'مشروبات'],
             'image' => $imageFile,
-            'description' => 'Hot and cold drinks',
+            'description' => ['en' => 'Hot and cold drinks', 'ar' => 'مشروبات ساخنة وباردة'],
             'type' => 'product',
         ]);
 
     $storeResponse->assertStatus(201)
-        ->assertJsonPath('data.name', 'Drinks');
+        ->assertJsonPath('data.name.en', 'Drinks')
+        ->assertJsonPath('data.name.ar', 'مشروبات');
 
     $imageUrl = $storeResponse->json('data.image');
     expect($imageUrl)->toContain('storage/categories/');
@@ -201,14 +202,15 @@ test('admin can perform CRUD on Category model with storage url image', function
 test('admin can perform CRUD on Discount model', function () {
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/discounts', [
-            'name' => 'Summer Sale 2026',
+            'name' => ['en' => 'Summer Sale 2026', 'ar' => 'تخفيضات صيف 2026'],
             'type' => 'percentage',
             'amount' => 15.00,
             'status' => true,
         ]);
 
     $storeResponse->assertStatus(201)
-        ->assertJsonPath('data.name', 'Summer Sale 2026')
+        ->assertJsonPath('data.name.en', 'Summer Sale 2026')
+        ->assertJsonPath('data.name.ar', 'تخفيضات صيف 2026')
         ->assertJsonPath('data.amount', 15);
 
     $discountId = $storeResponse->json('data.id');
@@ -221,12 +223,13 @@ test('admin can perform CRUD on Discount model', function () {
 test('admin can perform CRUD on ExpenseList model', function () {
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/expense-lists', [
-            'name' => 'Kitchen Supplies Expense',
-            'description' => 'General kitchen purchases',
+            'name' => ['en' => 'Kitchen Supplies Expense', 'ar' => 'مصروفات مستلزمات المطبخ'],
+            'description' => ['en' => 'General kitchen purchases', 'ar' => 'مشتريات المطبخ العامة'],
         ]);
 
     $storeResponse->assertStatus(201)
-        ->assertJsonPath('data.name', 'Kitchen Supplies Expense');
+        ->assertJsonPath('data.name.en', 'Kitchen Supplies Expense')
+        ->assertJsonPath('data.name.ar', 'مصروفات مستلزمات المطبخ');
 
     $expenseListId = $storeResponse->json('data.id');
 
@@ -241,7 +244,7 @@ test('admin can perform CRUD on FinancialAccount model with storage icon URL & b
 
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/financial-accounts', [
-            'name' => 'Cash Safe A',
+            'name' => ['en' => 'Cash Safe A', 'ar' => 'خزنة نقدية أ'],
             'icon' => $iconFile,
             'balance' => 5000.50,
             'status' => true,
@@ -249,7 +252,8 @@ test('admin can perform CRUD on FinancialAccount model with storage icon URL & b
         ]);
 
     $storeResponse->assertStatus(201)
-        ->assertJsonPath('data.name', 'Cash Safe A')
+        ->assertJsonPath('data.name.en', 'Cash Safe A')
+        ->assertJsonPath('data.name.ar', 'خزنة نقدية أ')
         ->assertJsonPath('data.balance', 5000.5)
         ->assertJsonStructure(['select_options' => ['branches']]);
 
@@ -272,13 +276,14 @@ test('admin can perform CRUD on Hall model with branch select options', function
 
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/halls', [
-            'name' => 'VIP VIP Hall',
+            'name' => ['en' => 'VIP VIP Hall', 'ar' => 'قاعة كبار الزوار'],
             'branch_id' => $branch->id,
             'status' => true,
         ]);
 
     $storeResponse->assertStatus(201)
-        ->assertJsonPath('data.name', 'VIP VIP Hall')
+        ->assertJsonPath('data.name.en', 'VIP VIP Hall')
+        ->assertJsonPath('data.name.ar', 'قاعة كبار الزوار')
         ->assertJsonStructure(['select_options' => ['branches']]);
 
     $hallId = $storeResponse->json('data.id');
