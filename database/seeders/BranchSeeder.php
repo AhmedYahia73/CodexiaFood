@@ -12,7 +12,11 @@ class BranchSeeder extends Seeder
     {
         $branches = [
             [
-                'name' => 'الفرع الرئيسي - القاهرة (Main Branch - Cairo)',
+                'name' => [
+                    'ar' => 'الفرع الرئيسي - القاهرة',
+                    'en' => 'Main Branch - Cairo',
+                ],
+                'user_name' => 'branch_cairo',
                 'address' => 'شارع التحرير، الدقي، القاهرة',
                 'watts' => '01012345678',
                 'facebook' => 'https://facebook.com/codexa.cairo',
@@ -20,7 +24,11 @@ class BranchSeeder extends Seeder
                 'password' => Hash::make('branch123'),
             ],
             [
-                'name' => 'فرع الإسكندرية - الكورنيش (Alexandria Branch)',
+                'name' => [
+                    'ar' => 'فرع الإسكندرية - الكورنيش',
+                    'en' => 'Alexandria Branch',
+                ],
+                'user_name' => 'branch_alex',
                 'address' => 'طريق الكورنيش، سيدي جابر، الإسكندرية',
                 'watts' => '01123456789',
                 'facebook' => 'https://facebook.com/codexa.alex',
@@ -28,7 +36,11 @@ class BranchSeeder extends Seeder
                 'password' => Hash::make('branch123'),
             ],
             [
-                'name' => 'فرع الجيزة - الشيخ زايد (Sheikh Zayed Branch)',
+                'name' => [
+                    'ar' => 'فرع الجيزة - الشيخ زايد',
+                    'en' => 'Sheikh Zayed Branch',
+                ],
+                'user_name' => 'branch_zayed',
                 'address' => 'محور 26 يوليو، الشيخ زايد، الجيزة',
                 'watts' => '01234567890',
                 'facebook' => 'https://facebook.com/codexa.zayed',
@@ -36,7 +48,11 @@ class BranchSeeder extends Seeder
                 'password' => Hash::make('branch123'),
             ],
             [
-                'name' => 'فرع القاهرة الجديدة - التجمع (New Cairo Branch)',
+                'name' => [
+                    'ar' => 'فرع القاهرة الجديدة - التجمع',
+                    'en' => 'New Cairo Branch',
+                ],
+                'user_name' => 'branch_newcairo',
                 'address' => 'شارع التسعين الشمالي، التجمع الخامس',
                 'watts' => '01543219876',
                 'facebook' => 'https://facebook.com/codexa.newcairo',
@@ -46,7 +62,7 @@ class BranchSeeder extends Seeder
         ];
 
         foreach ($branches as $branch) {
-            Branch::firstOrCreate(['name' => $branch['name']], $branch);
+            Branch::firstOrCreate(['user_name' => $branch['user_name']], $branch);
         }
     }
 }

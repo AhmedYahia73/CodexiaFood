@@ -13,6 +13,7 @@ class Branch extends Authenticatable implements JWTSubject
 
     protected $fillable = [
         'name',
+        'user_name',
         'address',
         'watts',
         'facebook',
@@ -36,6 +37,7 @@ class Branch extends Authenticatable implements JWTSubject
     protected function casts(): array
     {
         return [
+            'name' => 'array',
             'status' => 'boolean',
             'password' => 'hashed',
         ];

@@ -13,6 +13,7 @@ class ProductRecipeManufacturing extends Model
     protected $fillable = [
         'material_id',
         'product_recipe_id',
+        'product_manufact_id',
         'count',
     ];
 
@@ -31,5 +32,10 @@ class ProductRecipeManufacturing extends Model
     public function productRecipe(): BelongsTo
     {
         return $this->belongsTo(ProductRecipe::class);
+    }
+
+    public function productManufacturing(): BelongsTo
+    {
+        return $this->belongsTo(ProductManufacturing::class, 'product_manufact_id');
     }
 }

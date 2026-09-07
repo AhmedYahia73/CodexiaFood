@@ -19,6 +19,7 @@ class Product extends Model
         'tax_id',
         'discount_id',
         'category_id',
+        'stock',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class Product extends Model
             'name' => 'array',
             'description' => 'array',
             'price' => 'decimal:2',
+            'stock' => 'integer',
         ];
     }
 

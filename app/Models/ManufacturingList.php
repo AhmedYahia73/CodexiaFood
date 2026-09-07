@@ -12,7 +12,7 @@ class ManufacturingList extends Model
     use HasFactory;
 
     protected $fillable = [
-        'material_id',
+        'product_id',
         'product_recipe_id',
         'count',
     ];
@@ -24,9 +24,9 @@ class ManufacturingList extends Model
         ];
     }
 
-    public function material(): BelongsTo
+    public function product(): BelongsTo
     {
-        return $this->belongsTo(Material::class);
+        return $this->belongsTo(Product::class);
     }
 
     public function productRecipe(): BelongsTo

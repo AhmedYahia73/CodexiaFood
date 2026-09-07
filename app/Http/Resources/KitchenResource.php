@@ -5,7 +5,7 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class BranchResource extends JsonResource
+class KitchenResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -18,11 +18,12 @@ class BranchResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'user_name' => $this->user_name,
-            'address' => $this->address,
-            'watts' => $this->watts,
-            'facebook' => $this->facebook,
+            'branch_id' => $this->branch_id,
+            'branch' => $this->relationLoaded('branch') && $this->branch ? [
+                'id' => $this->branch->id,
+                'name' => $this->branch->name,
+            ] : null,
             'status' => (bool) $this->status,
-            'role' => $this->role,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

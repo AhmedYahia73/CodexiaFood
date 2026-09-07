@@ -11,6 +11,9 @@ use App\Http\Controllers\api\admin\ExpenseListController;
 use App\Http\Controllers\api\admin\FinancialAccountController;
 use App\Http\Controllers\api\admin\HallController;
 use App\Http\Controllers\api\admin\HallTableController;
+use App\Http\Controllers\api\admin\KitchenController;
+use App\Http\Controllers\api\admin\ManufactringController;
+use App\Http\Controllers\api\admin\ProductManufactringController;
 use App\Http\Controllers\api\AuthController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +47,10 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('financial-accounts/select-options', [FinancialAccountController::class, 'selectOptions']);
     Route::get('halls/select-options', [HallController::class, 'selectOptions']);
     Route::get('hall-tables/select-options', [HallTableController::class, 'selectOptions']);
+    Route::get('kitchens/select-options', [KitchenController::class, 'selectOptions']);
+    Route::get('product-manufacturings/select-options', [ProductManufactringController::class, 'selectOptions']);
+    Route::get('manufacturing/select-options', [ManufactringController::class, 'selectOptions']);
+    Route::get('manufacturing/specifications', [ManufactringController::class, 'getSpecification']);
 
     Route::apiResource('admins', AdminController::class);
     Route::apiResource('branches', BranchController::class);
@@ -56,4 +63,10 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('financial-accounts', FinancialAccountController::class);
     Route::apiResource('halls', HallController::class);
     Route::apiResource('hall-tables', HallTableController::class);
+    Route::apiResource('kitchens', KitchenController::class);
+    Route::apiResource('product-manufacturings', ProductManufactringController::class);
+
+    Route::get('manufacturing', [ManufactringController::class, 'index']);
+    Route::post('manufacturing', [ManufactringController::class, 'manufacture']);
+    Route::get('manufacturing/{manufacturingList}', [ManufactringController::class, 'show']);
 });

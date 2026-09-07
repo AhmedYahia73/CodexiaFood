@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('kitchens', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->string('user_name')->nullable()->unique();
             $table->string('password');
             $table->foreignId('branch_id')->nullable()->constrained('branches')->onUpdate('cascade')->onDelete('cascade');
             $table->boolean('status')->default(true);

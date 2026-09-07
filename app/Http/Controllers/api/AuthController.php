@@ -27,8 +27,8 @@ class AuthController extends Controller
         ]);
 
         $credentials = [];
- 
-        $credentials['name'] = $request->name; 
+
+        $credentials['name'] = $request->name;
         $credentials['password'] = $request->password;
 
         $targetGuards = $request->filled('guard')
@@ -39,6 +39,13 @@ class AuthController extends Controller
         $activeGuard = null;
 
         foreach ($targetGuards as $guard) {
+            if ($guard === 'branch' || $guard === 'kitchen') {
+                if ($token = Auth::guard($guard)->attempt(['user_name' => $request->name, 'password' => $request->password])) {
+                    $activeGuard = $guard;
+                    break;
+                }
+            }
+
             if ($token = Auth::guard($guard)->attempt($credentials)) {
                 $activeGuard = $guard;
                 break;

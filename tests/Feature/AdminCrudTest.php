@@ -81,10 +81,14 @@ test('admin can perform CRUD on Admin model', function () {
     $this->assertDatabaseMissing('admins', ['id' => $adminId]);
 });
 
-test('admin can perform CRUD on Branch model', function () {
+test('admin can perform CRUD on Branch model with bilingual name and user_name', function () {
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/branches', [
-            'name' => 'Main Branch',
+            'name' => [
+                'ar' => 'الفرع الرئيسي',
+                'en' => 'Main Branch',
+            ],
+            'user_name' => 'main_branch_01',
             'address' => '123 Main St',
             'watts' => '01000000000',
             'facebook' => 'fb.com/mainbranch',
@@ -92,14 +96,43 @@ test('admin can perform CRUD on Branch model', function () {
         ]);
 
     $storeResponse->assertStatus(201)
-        ->assertJsonPath('data.name', 'Main Branch');
+        ->assertJsonPath('data.name.ar', 'الفرع الرئيسي')
+        ->assertJsonPath('data.name.en', 'Main Branch')
+        ->assertJsonPath('data.user_name', 'main_branch_01');
 
     $branchId = $storeResponse->json('data.id');
 
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->getJson("/api/admin/branches/{$branchId}")
         ->assertStatus(200)
-        ->assertJsonPath('data.name', 'Main Branch');
+        ->assertJsonPath('data.name.en', 'Main Branch')
+        ->assertJsonPath('data.user_name', 'main_branch_01');
+
+    // Update branch with password encryption & user_name
+    $updateResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->putJson("/api/admin/branches/{$branchId}", [
+            'name' => [
+                'ar' => 'الفرع الرئيسي المحدث',
+                'en' => 'Updated Main Branch',
+            ],
+            'user_name' => 'updated_branch_01',
+            'password' => 'newbranchpass123',
+        ]);
+
+    $updateResponse->assertStatus(200)
+        ->assertJsonPath('data.name.en', 'Updated Main Branch')
+        ->assertJsonPath('data.user_name', 'updated_branch_01');
+
+    // Verify branch can log in with user_name and new encrypted password
+    $loginResponse = $this->postJson('/api/auth/login', [
+        'name' => 'updated_branch_01',
+        'password' => 'newbranchpass123',
+        'guard' => 'branch',
+    ]);
+
+    $loginResponse->assertStatus(200)
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('data.guard', 'branch');
 
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->deleteJson("/api/admin/branches/{$branchId}")
@@ -335,6 +368,7 @@ test('admin can fetch dedicated select-options for all controllers returning str
         '/api/admin/financial-accounts/select-options' => ['branches'],
         '/api/admin/halls/select-options' => ['branches'],
         '/api/admin/hall-tables/select-options' => ['branches', 'halls'],
+        '/api/admin/kitchens/select-options' => ['branches'],
     ];
 
     foreach ($endpoints as $endpoint => $keys) {

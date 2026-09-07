@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('manufacturing_lists', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('material_id')->nullable()->constrained('materials')->onUpdate('cascade')->onDelete('cascade');
+            // $table->foreignId('material_id')->nullable()->constrained('materials')->onUpdate('cascade')->onDelete('cascade');
             $table->foreignId('product_recipe_id')->nullable()->constrained('product_recipes')->onUpdate('cascade')->onDelete('cascade');
             $table->integer('count')->default(1);
             $table->timestamps();

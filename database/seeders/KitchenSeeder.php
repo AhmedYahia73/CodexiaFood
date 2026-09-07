@@ -37,9 +37,10 @@ class KitchenSeeder extends Seeder
         ];
 
         foreach ($branches as $branch) {
-            foreach ($kitchenTypes as $kt) {
+            foreach ($kitchenTypes as $index => $kt) {
                 Kitchen::create([
                     'name' => $kt['name'],
+                    'user_name' => "kitchen_{$branch->id}_".($index + 1),
                     'password' => $kt['password'],
                     'branch_id' => $branch->id,
                     'status' => $kt['status'],

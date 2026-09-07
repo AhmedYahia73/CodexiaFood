@@ -20,6 +20,7 @@ return new class extends Migration
             $table->foreignId('tax_id')->nullable()->constrained('taxes')->onUpdate('cascade')->onDelete('set null');
             $table->foreignId('discount_id')->nullable()->constrained('discounts')->onUpdate('cascade')->onDelete('set null');
             $table->foreignId('category_id')->nullable()->constrained('categories')->onUpdate('cascade')->onDelete('cascade');
+            $table->integer('stock')->default(0);
             $table->timestamps();
         });
     }

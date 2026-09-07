@@ -14,6 +14,7 @@ class Kitchen extends Authenticatable implements JWTSubject
 
     protected $fillable = [
         'name',
+        'user_name',
         'password',
         'branch_id',
         'status',
