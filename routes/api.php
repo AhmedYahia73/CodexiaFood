@@ -18,6 +18,9 @@ use App\Http\Controllers\api\admin\PaymentMethodController;
 use App\Http\Controllers\api\admin\ProductController;
 use App\Http\Controllers\api\admin\ProductManufactringController;
 use App\Http\Controllers\api\admin\ProductRecipeController;
+use App\Http\Controllers\api\admin\SupplierController;
+use App\Http\Controllers\api\admin\TaxController;
+use App\Http\Controllers\api\admin\WasteController;
 use App\Http\Controllers\api\AuthController;
 use Illuminate\Support\Facades\Route;
 
@@ -57,6 +60,9 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('product-manufacturings/select-options', [ProductManufactringController::class, 'selectOptions']);
     Route::get('product-recipes/select-options', [ProductRecipeController::class, 'selectOptions']);
     Route::get('products/select-options', [ProductController::class, 'selectOptions']);
+    Route::get('suppliers/select-options', [SupplierController::class, 'selectOptions']);
+    Route::get('taxes/select-options', [TaxController::class, 'selectOptions']);
+    Route::get('wastes/select-options', [WasteController::class, 'selectOptions']);
     Route::get('manufacturing/select-options', [ManufactringController::class, 'selectOptions']);
     Route::get('manufacturing/specifications', [ManufactringController::class, 'getSpecification']);
 
@@ -77,6 +83,9 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('products', ProductController::class);
     Route::apiResource('product-manufacturings', ProductManufactringController::class);
     Route::apiResource('product-recipes', ProductRecipeController::class);
+    Route::apiResource('suppliers', SupplierController::class);
+    Route::apiResource('taxes', TaxController::class);
+    Route::apiResource('wastes', WasteController::class);
 
     Route::get('manufacturing', [ManufactringController::class, 'index']);
     Route::post('manufacturing', [ManufactringController::class, 'manufacture']);
