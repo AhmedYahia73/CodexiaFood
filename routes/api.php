@@ -13,7 +13,11 @@ use App\Http\Controllers\api\admin\HallController;
 use App\Http\Controllers\api\admin\HallTableController;
 use App\Http\Controllers\api\admin\KitchenController;
 use App\Http\Controllers\api\admin\ManufactringController;
+use App\Http\Controllers\api\admin\MaterialController;
+use App\Http\Controllers\api\admin\PaymentMethodController;
+use App\Http\Controllers\api\admin\ProductController;
 use App\Http\Controllers\api\admin\ProductManufactringController;
+use App\Http\Controllers\api\admin\ProductRecipeController;
 use App\Http\Controllers\api\AuthController;
 use Illuminate\Support\Facades\Route;
 
@@ -48,7 +52,11 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('halls/select-options', [HallController::class, 'selectOptions']);
     Route::get('hall-tables/select-options', [HallTableController::class, 'selectOptions']);
     Route::get('kitchens/select-options', [KitchenController::class, 'selectOptions']);
+    Route::get('materials/select-options', [MaterialController::class, 'selectOptions']);
+    Route::get('payment-methods/select-options', [PaymentMethodController::class, 'selectOptions']);
     Route::get('product-manufacturings/select-options', [ProductManufactringController::class, 'selectOptions']);
+    Route::get('product-recipes/select-options', [ProductRecipeController::class, 'selectOptions']);
+    Route::get('products/select-options', [ProductController::class, 'selectOptions']);
     Route::get('manufacturing/select-options', [ManufactringController::class, 'selectOptions']);
     Route::get('manufacturing/specifications', [ManufactringController::class, 'getSpecification']);
 
@@ -64,7 +72,11 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('halls', HallController::class);
     Route::apiResource('hall-tables', HallTableController::class);
     Route::apiResource('kitchens', KitchenController::class);
+    Route::apiResource('materials', MaterialController::class);
+    Route::apiResource('payment-methods', PaymentMethodController::class);
+    Route::apiResource('products', ProductController::class);
     Route::apiResource('product-manufacturings', ProductManufactringController::class);
+    Route::apiResource('product-recipes', ProductRecipeController::class);
 
     Route::get('manufacturing', [ManufactringController::class, 'index']);
     Route::post('manufacturing', [ManufactringController::class, 'manufacture']);
