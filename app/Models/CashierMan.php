@@ -79,4 +79,9 @@ class CashierMan extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Order::class);
     }
+
+    public function startShifts(): HasMany
+    {
+        return $this->hasMany(StartShift::class);
+    }
 }

@@ -116,4 +116,6 @@ Route::middleware(['auth:cashier_man,admin', 'role:cashier_man,cashier,admin'])-
     Route::get('addons', [CashierHomeController::class, 'addons']);
     Route::get('halls', [CashierHomeController::class, 'halls']);
     Route::get('hall-tables', [CashierHomeController::class, 'hallTables']);
+    Route::post('start-shift', [CashierHomeController::class, 'startShift']);
+    Route::post('end-shift', [CashierHomeController::class, 'endShift']);
 });

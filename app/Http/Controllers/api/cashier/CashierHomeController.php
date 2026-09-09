@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Product;
+use App\Models\StartShift;
 use App\Services\PriceCalculatorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -296,6 +297,86 @@ class CashierHomeController extends Controller
         return response()->json([
             'status' => true,
             'data' => $tables,
+        ]);
+    }
+
+    /**
+     * Start a new shift for the cashier.
+     */
+    public function startShift(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'cashier_id' => 'required|exists:cashiers,id',
+            'cashier_man_id' => 'nullable|exists:cashier_men,id',
+        ]);
+
+        $cashierMan = auth()->user();
+        $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
+        $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
+
+        $hasOpenShift = StartShift::where('cashier_man_id', $cashierManId)
+            ->where('branch_id', $branchId)
+            ->whereNull('end')
+            ->exists();
+
+        if ($hasOpenShift) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى غلق الشيفت السابق اولا',
+            ], 400);
+        }
+
+        if ($cashierMan) {
+            $cashierMan->update([
+                'cashier_id' => $validated['cashier_id'],
+            ]);
+        }
+
+        $startShift = StartShift::create([
+            'start' => now(),
+            'end' => null,
+            'branch_id' => $branchId,
+            'cashier_id' => $validated['cashier_id'],
+            'cashier_man_id' => $cashierManId,
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم بدء الشيفت بنجاح',
+            'data' => $startShift->load(['branch', 'cashier', 'cashierMan']),
+        ], 201);
+    }
+
+    /**
+     * End the current open shift for the cashier.
+     */
+    public function endShift(Request $request): JsonResponse
+    {
+        $cashierMan = auth()->user();
+        $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
+        $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
+
+        $openShift = StartShift::where('cashier_man_id', $cashierManId)
+            ->where('branch_id', $branchId)
+            ->whereNull('end')
+            ->latest('start')
+            ->first();
+
+        if (! $openShift) {
+            return response()->json([
+                'status' => false,
+                'message' => 'لا يوجد شيفت مفتوح حالياً',
+            ], 400);
+        }
+
+        $openShift->update([
+            'end' => now(),
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم إنهاء الشيفت بنجاح',
+            'data' => $openShift->fresh(['branch', 'cashier', 'cashierMan']),
         ]);
     }
 }
