@@ -86,7 +86,9 @@ test('cashier cannot start a new shift if a previous shift is still open', funct
         ]);
 });
 
-test('cashier can end currently open shift', function () {
+test('cashier can end currently open shift and reset cashier_id to null', function () {
+    $this->cashierMan->update(['cashier_id' => $this->cashier1->id]);
+
     $shift = StartShift::create([
         'start' => now()->subHours(3),
         'end' => null,
@@ -104,6 +106,7 @@ test('cashier can end currently open shift', function () {
         ]);
 
     expect($shift->fresh()->end)->not->toBeNull();
+    expect($this->cashierMan->fresh()->cashier_id)->toBeNull();
 });
 
 test('cashier receives error when attempting to end shift while none is open', function () {

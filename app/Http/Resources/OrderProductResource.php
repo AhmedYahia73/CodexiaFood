@@ -29,6 +29,7 @@ class OrderProductResource extends JsonResource
             'id' => $this->id,
             'order_id' => $this->order_id,
             'product_id' => $this->product_id,
+            'quantity' => (int) ($this->quantity ?? 1),
             'name' => $localizedName,
             'name_translations' => is_array($productName) ? $productName : null,
             'price' => (float) $this->price,

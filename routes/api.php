@@ -24,7 +24,9 @@ use App\Http\Controllers\api\admin\SupplierController;
 use App\Http\Controllers\api\admin\TaxController;
 use App\Http\Controllers\api\admin\WasteController;
 use App\Http\Controllers\api\AuthController;
+use App\Http\Controllers\api\cashier\CashierCartController;
 use App\Http\Controllers\api\cashier\CashierHomeController;
+use App\Http\Controllers\api\cashier\CashierOrderController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -118,4 +120,10 @@ Route::middleware(['auth:cashier_man,admin', 'role:cashier_man,cashier,admin'])-
     Route::get('hall-tables', [CashierHomeController::class, 'hallTables']);
     Route::post('start-shift', [CashierHomeController::class, 'startShift']);
     Route::post('end-shift', [CashierHomeController::class, 'endShift']);
+
+    Route::delete('cart/clear', [CashierCartController::class, 'clear']);
+    Route::apiResource('cart', CashierCartController::class);
+
+    Route::post('orders/checkout', [CashierOrderController::class, 'checkout']);
+    Route::apiResource('orders', CashierOrderController::class)->only(['index', 'show']);
 });

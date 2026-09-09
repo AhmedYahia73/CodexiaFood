@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\cashier;
 
 use App\Http\Controllers\Controller;
 use App\Models\Addon;
+use App\Models\CashierMan;
 use App\Models\Category;
 use App\Models\Hall;
 use App\Models\HallTable;
@@ -372,6 +373,16 @@ class CashierHomeController extends Controller
         $openShift->update([
             'end' => now(),
         ]);
+
+        if ($cashierMan) {
+            $cashierMan->update([
+                'cashier_id' => null,
+            ]);
+        } elseif ($cashierManId) {
+            CashierMan::where('id', $cashierManId)->update([
+                'cashier_id' => null,
+            ]);
+        }
 
         return response()->json([
             'status' => true,
