@@ -13,6 +13,16 @@ use Illuminate\Validation\Rule;
 
 class BranchController extends Controller
 {
+    public function selectOptions(): JsonResponse
+    {
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'branches' => Branch::select('id', 'name')->get(),
+            ],
+        ]);
+    }
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $branches = Branch::latest()->paginate($request->get('per_page', 15));

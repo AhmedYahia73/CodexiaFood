@@ -5,7 +5,7 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class CashierManResource extends JsonResource
+class ShiftResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -17,13 +17,11 @@ class CashierManResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
-            'cashier_id' => $this->cashier_id,
+            'start_time' => $this->start_time,
+            'end_time' => $this->end_time,
             'branch_id' => $this->branch_id,
-            'shift_id' => $this->shift_id,
-            'role' => $this->role,
+            'is_tomorrow' => (bool) $this->is_tomorrow,
             'branch' => new BranchResource($this->whenLoaded('branch')),
-            'cashier' => new CashierResource($this->whenLoaded('cashier')),
-            'shift' => new ShiftResource($this->whenLoaded('shift')),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

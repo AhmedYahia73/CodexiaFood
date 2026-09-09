@@ -14,14 +14,17 @@ use App\Http\Controllers\api\admin\HallTableController;
 use App\Http\Controllers\api\admin\KitchenController;
 use App\Http\Controllers\api\admin\ManufactringController;
 use App\Http\Controllers\api\admin\MaterialController;
+use App\Http\Controllers\api\admin\OrderController;
 use App\Http\Controllers\api\admin\PaymentMethodController;
 use App\Http\Controllers\api\admin\ProductController;
 use App\Http\Controllers\api\admin\ProductManufactringController;
 use App\Http\Controllers\api\admin\ProductRecipeController;
+use App\Http\Controllers\api\admin\ShiftController;
 use App\Http\Controllers\api\admin\SupplierController;
 use App\Http\Controllers\api\admin\TaxController;
 use App\Http\Controllers\api\admin\WasteController;
 use App\Http\Controllers\api\AuthController;
+use App\Http\Controllers\api\cashier\CashierHomeController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -47,6 +50,7 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function () {
     // Select options endpoints for frontend dropdowns
     Route::get('admins/select-options', [AdminController::class, 'selectOptions']);
+    Route::get('branches/select-options', [BranchController::class, 'selectOptions']);
     Route::get('cashier-men/select-options', [CashierManController::class, 'selectOptions']);
     Route::get('cashiers/select-options', [CashierController::class, 'selectOptions']);
     Route::get('deliveries/select-options', [DeliveryController::class, 'selectOptions']);
@@ -56,15 +60,20 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('hall-tables/select-options', [HallTableController::class, 'selectOptions']);
     Route::get('kitchens/select-options', [KitchenController::class, 'selectOptions']);
     Route::get('materials/select-options', [MaterialController::class, 'selectOptions']);
+    Route::get('orders/select-options', [OrderController::class, 'selectOptions']);
     Route::get('payment-methods/select-options', [PaymentMethodController::class, 'selectOptions']);
     Route::get('product-manufacturings/select-options', [ProductManufactringController::class, 'selectOptions']);
     Route::get('product-recipes/select-options', [ProductRecipeController::class, 'selectOptions']);
     Route::get('products/select-options', [ProductController::class, 'selectOptions']);
+    Route::get('shifts/select-options', [ShiftController::class, 'selectOptions']);
     Route::get('suppliers/select-options', [SupplierController::class, 'selectOptions']);
     Route::get('taxes/select-options', [TaxController::class, 'selectOptions']);
     Route::get('wastes/select-options', [WasteController::class, 'selectOptions']);
     Route::get('manufacturing/select-options', [ManufactringController::class, 'selectOptions']);
     Route::get('manufacturing/specifications', [ManufactringController::class, 'getSpecification']);
+
+    Route::get('orders/pos', [OrderController::class, 'posOrders']);
+    Route::get('orders/online', [OrderController::class, 'onlineOrders']);
 
     Route::apiResource('admins', AdminController::class);
     Route::apiResource('branches', BranchController::class);
@@ -79,10 +88,12 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('hall-tables', HallTableController::class);
     Route::apiResource('kitchens', KitchenController::class);
     Route::apiResource('materials', MaterialController::class);
+    Route::apiResource('orders', OrderController::class);
     Route::apiResource('payment-methods', PaymentMethodController::class);
     Route::apiResource('products', ProductController::class);
     Route::apiResource('product-manufacturings', ProductManufactringController::class);
     Route::apiResource('product-recipes', ProductRecipeController::class);
+    Route::apiResource('shifts', ShiftController::class);
     Route::apiResource('suppliers', SupplierController::class);
     Route::apiResource('taxes', TaxController::class);
     Route::apiResource('wastes', WasteController::class);
@@ -90,4 +101,19 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('manufacturing', [ManufactringController::class, 'index']);
     Route::post('manufacturing', [ManufactringController::class, 'manufacture']);
     Route::get('manufacturing/{manufacturingList}', [ManufactringController::class, 'show']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Cashier Protected Routes (role = cashier_man, cashier, admin)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:cashier_man,admin', 'role:cashier_man,cashier,admin'])->prefix('cashier')->group(function () {
+    Route::get('categories/parents', [CashierHomeController::class, 'parentCategories']);
+    Route::get('categories/sub', [CashierHomeController::class, 'subCategories']);
+    Route::get('products', [CashierHomeController::class, 'products']);
+    Route::get('products/{product}', [CashierHomeController::class, 'productDetails']);
+    Route::get('addons', [CashierHomeController::class, 'addons']);
+    Route::get('halls', [CashierHomeController::class, 'halls']);
+    Route::get('hall-tables', [CashierHomeController::class, 'hallTables']);
 });

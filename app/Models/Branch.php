@@ -89,4 +89,9 @@ class Branch extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Kitchen::class);
     }
+
+    public function shifts(): HasMany
+    {
+        return $this->hasMany(Shift::class);
+    }
 }

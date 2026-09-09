@@ -20,6 +20,7 @@ class CashierMan extends Authenticatable implements JWTSubject
         'password',
         'cashier_id',
         'branch_id',
+        'shift_id',
     ];
 
     protected $appends = [
@@ -64,8 +65,18 @@ class CashierMan extends Authenticatable implements JWTSubject
         return $this->belongsTo(Cashier::class, 'cashier_id');
     }
 
+    public function shift(): BelongsTo
+    {
+        return $this->belongsTo(Shift::class);
+    }
+
     public function expenses(): HasMany
     {
         return $this->hasMany(Expense::class);
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 }
