@@ -150,10 +150,10 @@ test('public user can fetch cart items and grand totals for a table', function (
     expect($response->json('grand_totals.grand_final_price'))->toBeGreaterThan(0);
 });
 
-test('cart index returns 400 when table_id is missing', function () {
+test('cart index returns 422 when table_id is missing', function () {
     $this->getJson('/api/table/cart')
-        ->assertStatus(400)
-        ->assertJsonPath('status', false);
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['table_id']);
 });
 
 test('public user can view, update and delete a cart item', function () {

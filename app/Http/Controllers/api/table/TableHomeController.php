@@ -54,6 +54,10 @@ class TableHomeController extends Controller
      */
     public function parentCategories(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $categories = Category::whereNull('category_id')
@@ -80,12 +84,17 @@ class TableHomeController extends Controller
      */
     public function subCategories(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'category_id' => 'nullable|integer|exists:categories,id',
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $query = Category::whereNotNull('category_id')->where('status', true);
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->query('category_id'));
+        if (! empty($validated['category_id'])) {
+            $query->where('category_id', $validated['category_id']);
         }
 
         $categories = $query->latest()
@@ -111,16 +120,22 @@ class TableHomeController extends Controller
      */
     public function products(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'category_id' => 'nullable|integer|exists:categories,id',
+            'sub_category_id' => 'nullable|integer|exists:categories,id',
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $query = Product::with(['discount', 'tax'])->latest();
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->query('category_id'));
+        if (! empty($validated['category_id'])) {
+            $query->where('category_id', $validated['category_id']);
         }
 
-        if ($request->filled('sub_category_id')) {
-            $query->where('sub_category_id', $request->query('sub_category_id'));
+        if (! empty($validated['sub_category_id'])) {
+            $query->where('sub_category_id', $validated['sub_category_id']);
         }
 
         $products = $query->get()->map(function (Product $product) use ($locale) {
@@ -164,6 +179,10 @@ class TableHomeController extends Controller
      */
     public function productDetails(Request $request, Product $product): JsonResponse
     {
+        $request->validate([
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $product->load(['discount', 'tax', 'variations.options']);
@@ -224,6 +243,10 @@ class TableHomeController extends Controller
      */
     public function addons(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $addons = Addon::with(['discount', 'tax'])
@@ -253,6 +276,10 @@ class TableHomeController extends Controller
      */
     public function tableInfo(Request $request, HallTable $hallTable): JsonResponse
     {
+        $request->validate([
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $hallTable->load(['branch', 'hall']);

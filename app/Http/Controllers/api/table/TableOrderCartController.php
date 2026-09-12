@@ -60,7 +60,15 @@ class TableOrderCartController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $tableId = $request->query('table_id') ?? $request->query('hall_table_id');
+        $validated = $request->validate([
+            'table_id' => 'required_without:hall_table_id|nullable|integer|exists:hall_tables,id',
+            'hall_table_id' => 'nullable|integer|exists:hall_tables,id',
+            'lat' => 'nullable|numeric',
+            'lng' => 'nullable|numeric',
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
         if (! $tableId) {
             return response()->json([
                 'status' => false,
@@ -121,6 +129,9 @@ class TableOrderCartController extends Controller
             'variations.*.option_ids.*' => 'exists:options,id',
             'addons' => 'nullable|array',
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
+            'lat' => 'nullable|numeric',
+            'lng' => 'nullable|numeric',
+            'lang' => 'nullable|string|in:ar,en',
         ]);
 
         $tableId = $validated['table_id'] ?? $validated['hall_table_id'];
@@ -184,6 +195,12 @@ class TableOrderCartController extends Controller
      */
     public function show(Request $request, OrderCart $cart): JsonResponse
     {
+        $request->validate([
+            'lat' => 'nullable|numeric',
+            'lng' => 'nullable|numeric',
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         $cart->loadMissing('hallTable.branch');
         if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
             return $response;
@@ -226,6 +243,9 @@ class TableOrderCartController extends Controller
             'variations.*.option_ids.*' => 'exists:options,id',
             'addons' => 'nullable|array',
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
+            'lat' => 'nullable|numeric',
+            'lng' => 'nullable|numeric',
+            'lang' => 'nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
@@ -287,6 +307,11 @@ class TableOrderCartController extends Controller
      */
     public function destroy(Request $request, OrderCart $cart): JsonResponse
     {
+        $request->validate([
+            'lat' => 'nullable|numeric',
+            'lng' => 'nullable|numeric',
+        ]);
+
         $cart->loadMissing('hallTable.branch');
         if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
             return $response;
@@ -305,7 +330,14 @@ class TableOrderCartController extends Controller
      */
     public function clear(Request $request): JsonResponse
     {
-        $tableId = $request->input('table_id') ?? $request->input('hall_table_id');
+        $validated = $request->validate([
+            'table_id' => 'required_without:hall_table_id|nullable|integer|exists:hall_tables,id',
+            'hall_table_id' => 'nullable|integer|exists:hall_tables,id',
+            'lat' => 'nullable|numeric',
+            'lng' => 'nullable|numeric',
+        ]);
+
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
         if (! $tableId) {
             return response()->json([
                 'status' => false,
