@@ -10,38 +10,26 @@ class GeofenceService
     /**
      * Determine if a point (lat, lng) is inside a polygon using Ray-Casting algorithm.
      *
-     * @param  array<int, array{lat?: float|string, lng?: float|string, latitude?: float|string, longitude?: float|string}|array<int, float|string>>  $polygon
+     * @param  array<int, mixed>  $polygon
      */
     public function isPointInPolygon(float $lat, float $lng, array $polygon): bool
     {
-        $points = array_values(array_filter($polygon, function ($point) {
-            if (! is_array($point)) {
-                return false;
-            }
-
-            $hasLat = isset($point['lat']) || isset($point['latitude']) || isset($point[0]);
-            $hasLng = isset($point['lng']) || isset($point['longitude']) || isset($point[1]);
-
-            return $hasLat && $hasLng;
-        }));
+        $points = $this->normalizePolygonPoints($polygon);
 
         $numPoints = count($points);
         if ($numPoints < 3) {
-            return true;
+            return false;
         }
 
         $inside = false;
 
         for ($i = 0, $j = $numPoints - 1; $i < $numPoints; $j = $i++) {
-            $pi = $points[$i];
-            $pj = $points[$j];
+            $xi = $points[$i]['lat'];
+            $yi = $points[$i]['lng'];
+            $xj = $points[$j]['lat'];
+            $yj = $points[$j]['lng'];
 
-            $xi = (float) ($pi['lat'] ?? $pi['latitude'] ?? $pi[0] ?? 0);
-            $yi = (float) ($pi['lng'] ?? $pi['longitude'] ?? $pi[1] ?? 0);
-            $xj = (float) ($pj['lat'] ?? $pj['latitude'] ?? $pj[0] ?? 0);
-            $yj = (float) ($pj['lng'] ?? $pj['longitude'] ?? $pj[1] ?? 0);
-
-            // Check if horizontal ray crosses the segment between (xi, yi) and (xj, yj)
+            // Check if horizontal ray crosses edge (xi, yi) -> (xj, yj)
             if (($yi > $lng) !== ($yj > $lng)) {
                 $intersectX = ($xj - $xi) * ($lng - $yi) / ($yj - $yi) + $xi;
                 if ($lat < $intersectX) {
@@ -54,25 +42,94 @@ class GeofenceService
     }
 
     /**
+     * Normalize polygon points to an array of ['lat' => float, 'lng' => float].
+     *
+     * @return array<int, array{lat: float, lng: float}>
+     */
+    public function normalizePolygonPoints(mixed $polygon): array
+    {
+        while (is_string($polygon)) {
+            $decoded = json_decode($polygon, true);
+            if (! is_array($decoded)) {
+                break;
+            }
+            $polygon = $decoded;
+        }
+
+        if (! is_array($polygon)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($polygon as $point) {
+            if (! is_array($point)) {
+                continue;
+            }
+
+            $lower = array_change_key_case($point, CASE_LOWER);
+
+            $pLat = $lower['lat'] ?? $lower['latitude'] ?? null;
+            $pLng = $lower['lng'] ?? $lower['long'] ?? $lower['lon'] ?? $lower['longitude'] ?? null;
+
+            if ($pLat === null && isset($point[0])) {
+                $pLat = $point[0];
+            }
+            if ($pLng === null && isset($point[1])) {
+                $pLng = $point[1];
+            }
+
+            if ($pLat !== null && $pLng !== null && is_numeric($pLat) && is_numeric($pLng)) {
+                $normalized[] = [
+                    'lat' => (float) $pLat,
+                    'lng' => (float) $pLng,
+                ];
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
      * Extract user coordinates from request query, body, or headers.
      *
      * @return array{lat: float, lng: float}|null
      */
     public function getUserCoordinates(Request $request): ?array
     {
-        $lat = $request->input('lat')
-            ?? $request->input('latitude')
+        $all = array_change_key_case($request->all(), CASE_LOWER);
+
+        $lat = $all['lat']
+            ?? $all['latitude']
+            ?? $request->input('location.lat')
+            ?? $request->input('location.Lat')
+            ?? $request->input('location.latitude')
+            ?? $request->input('coords.latitude')
+            ?? $request->input('coords.lat')
             ?? $request->header('X-Lat')
             ?? $request->header('X-Latitude')
             ?? $request->header('lat')
             ?? $request->header('latitude');
 
-        $lng = $request->input('lng')
-            ?? $request->input('longitude')
+        $lng = $all['lng']
+            ?? $all['long']
+            ?? $all['lon']
+            ?? $all['longitude']
+            ?? $request->input('location.lng')
+            ?? $request->input('location.Lng')
+            ?? $request->input('location.long')
+            ?? $request->input('location.Long')
+            ?? $request->input('location.lon')
+            ?? $request->input('location.longitude')
+            ?? $request->input('coords.longitude')
+            ?? $request->input('coords.long')
+            ?? $request->input('coords.lng')
             ?? $request->header('X-Lng')
             ?? $request->header('X-Longitude')
+            ?? $request->header('X-Long')
             ?? $request->header('lng')
-            ?? $request->header('longitude');
+            ?? $request->header('longitude')
+            ?? $request->header('long');
 
         if ($lat === null || $lng === null) {
             return null;
@@ -96,16 +153,12 @@ class GeofenceService
     public function validateLocation(Request $request, ?Branch $branch): ?string
     {
         if (! $branch) {
-            return null;
+            return 'هذه الطاولة غير مرتبطة بفرع محدد';
         }
 
-        $polygon = $branch->location;
-        if (is_string($polygon)) {
-            $polygon = json_decode($polygon, true);
-        }
-
-        if (! is_array($polygon) || count($polygon) < 3) {
-            return null;
+        $points = $this->normalizePolygonPoints($branch->location);
+        if (count($points) < 3) {
+            return 'لم يتم تحديد النطاق الجغرافي لهذا الفرع';
         }
 
         $coords = $this->getUserCoordinates($request);
@@ -113,7 +166,7 @@ class GeofenceService
             return 'يرجى تحديد الموقع الجغرافي الخاص بك (lat, lng)';
         }
 
-        if (! $this->isPointInPolygon($coords['lat'], $coords['lng'], $polygon)) {
+        if (! $this->isPointInPolygon($coords['lat'], $coords['lng'], $points)) {
             return 'أنت خارج النطاق الجغرافي المسموح به لهذا الفرع';
         }
 

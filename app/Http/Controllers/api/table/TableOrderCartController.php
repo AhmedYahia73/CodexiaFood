@@ -65,6 +65,9 @@ class TableOrderCartController extends Controller
             'hall_table_id' => 'nullable|integer|exists:hall_tables,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'long' => 'nullable|numeric',
             'lang' => 'nullable|string|in:ar,en',
         ]);
 
@@ -131,6 +134,9 @@ class TableOrderCartController extends Controller
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'long' => 'nullable|numeric',
             'lang' => 'nullable|string|in:ar,en',
         ]);
 
@@ -198,11 +204,15 @@ class TableOrderCartController extends Controller
         $request->validate([
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'long' => 'nullable|numeric',
             'lang' => 'nullable|string|in:ar,en',
         ]);
 
-        $cart->loadMissing('hallTable.branch');
-        if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
+        $cart->loadMissing(['hallTable.branch', 'branch']);
+        $branch = $cart->hallTable?->branch ?? $cart->branch;
+        if ($response = $this->validateGeofence($request, $branch)) {
             return $response;
         }
 
@@ -229,8 +239,9 @@ class TableOrderCartController extends Controller
      */
     public function update(Request $request, OrderCart $cart): JsonResponse
     {
-        $cart->loadMissing('hallTable.branch');
-        if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
+        $cart->loadMissing(['hallTable.branch', 'branch']);
+        $branch = $cart->hallTable?->branch ?? $cart->branch;
+        if ($response = $this->validateGeofence($request, $branch)) {
             return $response;
         }
 
@@ -245,6 +256,9 @@ class TableOrderCartController extends Controller
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'long' => 'nullable|numeric',
             'lang' => 'nullable|string|in:ar,en',
         ]);
 
@@ -310,10 +324,14 @@ class TableOrderCartController extends Controller
         $request->validate([
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'long' => 'nullable|numeric',
         ]);
 
-        $cart->loadMissing('hallTable.branch');
-        if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
+        $cart->loadMissing(['hallTable.branch', 'branch']);
+        $branch = $cart->hallTable?->branch ?? $cart->branch;
+        if ($response = $this->validateGeofence($request, $branch)) {
             return $response;
         }
 
@@ -335,6 +353,9 @@ class TableOrderCartController extends Controller
             'hall_table_id' => 'nullable|integer|exists:hall_tables,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'long' => 'nullable|numeric',
         ]);
 
         $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;

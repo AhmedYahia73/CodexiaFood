@@ -20,6 +20,17 @@ beforeEach(function () {
     $this->branch = Branch::create([
         'name' => ['ar' => 'فرع التجمع', 'en' => 'Tagamoa Branch'],
         'status' => true,
+        'location' => [
+            ['lat' => 30.00, 'lng' => 31.00],
+            ['lat' => 30.00, 'lng' => 32.00],
+            ['lat' => 31.00, 'lng' => 32.00],
+            ['lat' => 31.00, 'lng' => 31.00],
+        ],
+    ]);
+
+    $this->withHeaders([
+        'X-Lat' => 30.5,
+        'X-Lng' => 31.5,
     ]);
 
     $this->hall = Hall::create([
@@ -299,6 +310,7 @@ test('branch geofence blocks request with 403 when user coordinates are missing'
     ]);
 
     // No coordinates sent
+    $this->flushHeaders();
     $res = $this->postJson('/api/table/cart', [
         'table_id' => $this->table->id,
         'product_id' => $this->product->id,
@@ -347,16 +359,8 @@ test('branch geofence works with complex polygon from real-world coordinates', f
 });
 
 test('branch geofence applies to clear endpoint', function () {
-    $this->branch->update([
-        'location' => [
-            ['lat' => 30.00, 'lng' => 31.00],
-            ['lat' => 30.00, 'lng' => 32.00],
-            ['lat' => 31.00, 'lng' => 32.00],
-            ['lat' => 31.00, 'lng' => 31.00],
-        ],
-    ]);
-
     // Clear without coords => 403
+    $this->flushHeaders();
     $this->deleteJson('/api/table/cart/clear', [
         'table_id' => $this->table->id,
     ])->assertStatus(403)
@@ -377,4 +381,40 @@ test('branch geofence applies to clear endpoint', function () {
         'lng' => 31.5,
     ])->assertStatus(200)
         ->assertJsonPath('status', true);
+});
+
+test('cart returns 403 when branch has no location configured', function () {
+    $this->branch->update(['location' => null]);
+
+    $this->getJson('/api/table/cart?table_id='.$this->table->id.'&lat=30.5&lng=31.5')
+        ->assertStatus(403)
+        ->assertJsonPath('message', 'لم يتم تحديد النطاق الجغرافي لهذا الفرع');
+});
+
+test('cart supports latitude, longitude, and long parameter aliases', function () {
+    $this->flushHeaders();
+
+    // Using lat and long inside
+    $res = $this->postJson('/api/table/cart', [
+        'table_id' => $this->table->id,
+        'product_id' => $this->product->id,
+        'quantity' => 1,
+        'lat' => 30.5,
+        'long' => 31.5,
+    ]);
+
+    $res->assertStatus(201)
+        ->assertJsonPath('status', true);
+
+    // Using latitude and longitude outside
+    $resOutside = $this->postJson('/api/table/cart', [
+        'table_id' => $this->table->id,
+        'product_id' => $this->product->id,
+        'quantity' => 1,
+        'latitude' => 50.0,
+        'longitude' => 10.0,
+    ]);
+
+    $resOutside->assertStatus(403)
+        ->assertJsonPath('message', 'أنت خارج النطاق الجغرافي المسموح به لهذا الفرع');
 });
