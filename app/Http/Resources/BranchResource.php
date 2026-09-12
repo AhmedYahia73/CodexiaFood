@@ -19,6 +19,7 @@ class BranchResource extends JsonResource
             'name' => $this->name,
             'user_name' => $this->user_name,
             'address' => $this->address,
+            'location' => $this->location,
             'watts' => $this->watts,
             'facebook' => $this->facebook,
             'status' => (bool) $this->status,

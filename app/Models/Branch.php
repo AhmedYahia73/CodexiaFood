@@ -15,6 +15,7 @@ class Branch extends Authenticatable implements JWTSubject
         'name',
         'user_name',
         'address',
+        'location',
         'watts',
         'facebook',
         'status',
@@ -38,6 +39,7 @@ class Branch extends Authenticatable implements JWTSubject
     {
         return [
             'name' => 'array',
+            'location' => 'array',
             'status' => 'boolean',
             'password' => 'hashed',
         ];

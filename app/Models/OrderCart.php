@@ -19,6 +19,7 @@ class OrderCart extends Model
         'cashier_id',
         'cashier_man_id',
         'branch_id',
+        'hall_table_id',
         'quantity',
         'notes',
     ];
@@ -58,5 +59,10 @@ class OrderCart extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function hallTable(): BelongsTo
+    {
+        return $this->belongsTo(HallTable::class);
     }
 }

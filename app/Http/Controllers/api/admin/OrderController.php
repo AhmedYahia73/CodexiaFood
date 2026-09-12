@@ -35,7 +35,7 @@ class OrderController extends Controller
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',
             'orderProducts.addons.addon',
-        ])->latest();
+        ])->latest('id');
     }
 
     public function selectOptions(): JsonResponse
@@ -58,38 +58,91 @@ class OrderController extends Controller
     {
         $query = $this->orderQuery();
 
-        if ($request->has('is_pos')) {
-            $isPos = filter_var($request->query('is_pos'), FILTER_VALIDATE_BOOLEAN);
-            $query->where('is_pos', $isPos);
+        if ($request->filled('is_pos') && ! in_array($request->query('is_pos'), ['all', 'undefined', 'null'], true)) {
+            $isPos = filter_var($request->query('is_pos'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($isPos !== null) {
+                $query->where('is_pos', $isPos);
+            }
         }
 
-        if ($request->has('shift_id')) {
+        if ($request->filled('shift_id') && ! in_array($request->query('shift_id'), ['all', 'undefined', 'null'], true)) {
             $query->where('shift_id', $request->query('shift_id'));
         }
 
-        if ($request->has('module')) {
+        if ($request->filled('module') && ! in_array($request->query('module'), ['all', 'undefined', 'null'], true)) {
             $query->where('module', $request->query('module'));
         }
 
-        $orders = $query->paginate($request->get('per_page', 15));
+        $perPage = (int) ($request->input('per_page')
+            ?? $request->input('perPage')
+            ?? $request->input('limit')
+            ?? $request->input('pageSize')
+            ?? 15);
+
+        $page = (int) ($request->input('page')
+            ?? $request->input('current_page')
+            ?? $request->input('currentPage')
+            ?? $request->input('p')
+            ?? 1);
+
+        $orders = $query->paginate(
+            perPage: $perPage,
+            columns: ['*'],
+            pageName: 'page',
+            page: $page
+        )->withQueryString();
 
         return OrderResource::collection($orders);
     }
 
     public function posOrders(Request $request): AnonymousResourceCollection
     {
+        $perPage = (int) ($request->input('per_page')
+            ?? $request->input('perPage')
+            ?? $request->input('limit')
+            ?? $request->input('pageSize')
+            ?? 15);
+
+        $page = (int) ($request->input('page')
+            ?? $request->input('current_page')
+            ?? $request->input('currentPage')
+            ?? $request->input('p')
+            ?? 1);
+
         $orders = $this->orderQuery()
             ->where('is_pos', true)
-            ->paginate($request->get('per_page', 15));
+            ->paginate(
+                perPage: $perPage,
+                columns: ['*'],
+                pageName: 'page',
+                page: $page
+            )->withQueryString();
 
         return OrderResource::collection($orders);
     }
 
     public function onlineOrders(Request $request): AnonymousResourceCollection
     {
+        $perPage = (int) ($request->input('per_page')
+            ?? $request->input('perPage')
+            ?? $request->input('limit')
+            ?? $request->input('pageSize')
+            ?? 15);
+
+        $page = (int) ($request->input('page')
+            ?? $request->input('current_page')
+            ?? $request->input('currentPage')
+            ?? $request->input('p')
+            ?? 1);
+
         $orders = $this->orderQuery()
             ->where('is_pos', false)
-            ->paginate($request->get('per_page', 15));
+            ->paginate(
+                perPage: $perPage,
+                columns: ['*'],
+                pageName: 'page',
+                page: $page
+            )->withQueryString();
 
         return OrderResource::collection($orders);
     }

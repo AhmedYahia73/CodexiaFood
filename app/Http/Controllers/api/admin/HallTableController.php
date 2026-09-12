@@ -7,12 +7,17 @@ use App\Http\Resources\HallTableResource;
 use App\Models\Branch;
 use App\Models\Hall;
 use App\Models\HallTable;
+use App\Services\QrCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class HallTableController extends Controller
 {
+    public function __construct(
+        protected QrCodeService $qrCodeService
+    ) {}
+
     public function selectOptions(): JsonResponse
     {
         return response()->json([
@@ -46,11 +51,12 @@ class HallTableController extends Controller
         ]);
 
         $hallTable = HallTable::create($validated);
+        $this->qrCodeService->generateForTable($hallTable);
 
         return response()->json([
             'status' => true,
             'message' => 'Hall table created successfully.',
-            'data' => new HallTableResource($hallTable->load(['branch', 'hall'])),
+            'data' => new HallTableResource($hallTable->fresh(['branch', 'hall'])),
             'select_options' => [
                 'branches' => Branch::select('id', 'name')->get(),
                 'halls' => Hall::select('id', 'name')->get(),
@@ -81,6 +87,10 @@ class HallTableController extends Controller
 
         $hallTable->update($validated);
 
+        if (! $hallTable->qr) {
+            $this->qrCodeService->generateForTable($hallTable);
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Hall table updated successfully.',
@@ -94,6 +104,7 @@ class HallTableController extends Controller
 
     public function destroy(HallTable $hallTable): JsonResponse
     {
+        $this->qrCodeService->deleteForTable($hallTable);
         $hallTable->delete();
 
         return response()->json([

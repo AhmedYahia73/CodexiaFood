@@ -1,22 +1,38 @@
 <?php
 
-namespace App\Http\Controllers\api\cashier;
+namespace App\Http\Controllers\api\table;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
+use App\Models\HallTable;
 use App\Models\OrderAddonCart;
 use App\Models\OrderCart;
 use App\Models\OrderVariationCart;
+use App\Services\GeofenceService;
 use App\Services\PriceCalculatorService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-class CashierCartController extends Controller
+class TableOrderCartController extends Controller
 {
     public function __construct(
-        protected PriceCalculatorService $priceCalculator
+        protected PriceCalculatorService $priceCalculator,
+        protected GeofenceService $geofenceService
     ) {}
+
+    private function validateGeofence(Request $request, ?Branch $branch): ?JsonResponse
+    {
+        if ($error = $this->geofenceService->validateLocation($request, $branch)) {
+            return response()->json([
+                'status' => false,
+                'message' => $error,
+            ], 403);
+        }
+
+        return null;
+    }
 
     private function getLocale(Request $request): string
     {
@@ -28,7 +44,7 @@ class CashierCartController extends Controller
         return str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
     }
 
-    private function cartQuery(int $cashierId): Builder
+    private function cartQuery(int $tableId): Builder
     {
         return OrderCart::with([
             'product.discount',
@@ -36,22 +52,19 @@ class CashierCartController extends Controller
             'variationCarts.variation',
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
-        ])->where(function ($query) use ($cashierId) {
-            $query->where('cashier_id', $cashierId)
-                ->orWhereNull('cashier_id');
-        });
+        ])->where('hall_table_id', $tableId);
     }
 
     /**
-     * Get all cart items for current cashier, with calculation and grand totals.
+     * Get all cart items for a given table, with calculation and grand totals.
      */
     public function index(Request $request): JsonResponse
     {
-        $cashierId = auth()->user()?->cashier_id;
-        if (! $cashierId) {
+        $tableId = $request->query('table_id') ?? $request->query('hall_table_id');
+        if (! $tableId) {
             return response()->json([
                 'status' => false,
-                'message' => 'يرجى تحديد جهاز الكاشير أولاً',
+                'message' => 'يرجى تحديد رقم الطاولة (table_id)',
                 'data' => [],
                 'grand_totals' => [
                     'grand_total_price' => 0.00,
@@ -62,16 +75,21 @@ class CashierCartController extends Controller
             ], 400);
         }
 
-        $validated = $request->validate([
-            'module' => 'required|in:takeaway,dinein,delivery',
-        ]);
+        $hallTable = HallTable::with('branch')->find((int) $tableId);
+        if (! $hallTable) {
+            return response()->json([
+                'status' => false,
+                'message' => 'الطاولة غير موجودة',
+            ], 404);
+        }
+
+        if ($response = $this->validateGeofence($request, $hallTable->branch)) {
+            return $response;
+        }
 
         $locale = $this->getLocale($request);
 
-        $query = $this->cartQuery($cashierId)
-            ->where('module', $validated['module']);
-
-        $carts = $query->latest('id')->get();
+        $carts = $this->cartQuery((int) $tableId)->latest('id')->get();
 
         $calculatedItems = $carts->map(
             fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale)
@@ -87,20 +105,13 @@ class CashierCartController extends Controller
     }
 
     /**
-     * Add an item to cart.
+     * Add an item to table cart.
      */
     public function store(Request $request): JsonResponse
     {
-        $cashierId = auth()->user()?->cashier_id;
-        if (! $cashierId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'يرجى بدء الشيفت وتحديد جهاز الكاشير أولاً',
-            ], 400);
-        }
-
         $validated = $request->validate([
-            'module' => 'required|in:takeaway,dinein,delivery',
+            'table_id' => 'required_without:hall_table_id|exists:hall_tables,id',
+            'hall_table_id' => 'nullable|exists:hall_tables,id',
             'product_id' => 'required|exists:products,id',
             'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
@@ -112,15 +123,23 @@ class CashierCartController extends Controller
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
         ]);
 
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'];
+        $hallTable = HallTable::with('branch')->findOrFail($tableId);
+
+        if ($response = $this->validateGeofence($request, $hallTable->branch)) {
+            return $response;
+        }
+
         $locale = $this->getLocale($request);
 
-        $cart = DB::transaction(function () use ($validated, $cashierId): OrderCart {
+        $cart = DB::transaction(function () use ($validated, $hallTable): OrderCart {
             $cart = OrderCart::create([
-                'module' => $validated['module'],
+                'module' => 'dinein',
                 'product_id' => $validated['product_id'],
-                'cashier_id' => $cashierId,
-                'cashier_man_id' => auth()->id(),
-                'branch_id' => auth()->user()?->branch_id,
+                'hall_table_id' => $hallTable->id,
+                'branch_id' => $hallTable->branch_id,
+                'cashier_id' => null,
+                'cashier_man_id' => null,
                 'quantity' => $validated['quantity'] ?? 1,
                 'notes' => $validated['notes'] ?? null,
             ]);
@@ -165,6 +184,11 @@ class CashierCartController extends Controller
      */
     public function show(Request $request, OrderCart $cart): JsonResponse
     {
+        $cart->loadMissing('hallTable.branch');
+        if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
+            return $response;
+        }
+
         $locale = $this->getLocale($request);
 
         $cart->load([
@@ -184,12 +208,16 @@ class CashierCartController extends Controller
     }
 
     /**
-     * Update cart item (quantity, notes, module, variations, addons).
+     * Update cart item (quantity, notes, variations, addons).
      */
     public function update(Request $request, OrderCart $cart): JsonResponse
     {
+        $cart->loadMissing('hallTable.branch');
+        if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
+            return $response;
+        }
+
         $validated = $request->validate([
-            'module' => 'sometimes|required|in:takeaway,dinein,delivery',
             'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
             'variations' => 'nullable|array',
@@ -204,9 +232,6 @@ class CashierCartController extends Controller
 
         DB::transaction(function () use ($validated, $cart): void {
             $updateData = [];
-            if (isset($validated['module'])) {
-                $updateData['module'] = $validated['module'];
-            }
             if (isset($validated['quantity'])) {
                 $updateData['quantity'] = $validated['quantity'];
             }
@@ -260,8 +285,13 @@ class CashierCartController extends Controller
     /**
      * Delete cart item.
      */
-    public function destroy(OrderCart $cart): JsonResponse
+    public function destroy(Request $request, OrderCart $cart): JsonResponse
     {
+        $cart->loadMissing('hallTable.branch');
+        if ($response = $this->validateGeofence($request, $cart->hallTable?->branch)) {
+            return $response;
+        }
+
         $cart->delete();
 
         return response()->json([
@@ -271,25 +301,31 @@ class CashierCartController extends Controller
     }
 
     /**
-     * Clear all cart items for the current cashier.
+     * Clear all cart items for a given table.
      */
     public function clear(Request $request): JsonResponse
     {
-        $cashierId = auth()->user()?->cashier_id;
-        if (! $cashierId) {
+        $tableId = $request->input('table_id') ?? $request->input('hall_table_id');
+        if (! $tableId) {
             return response()->json([
                 'status' => false,
-                'message' => 'يرجى تحديد جهاز الكاشير أولاً',
+                'message' => 'يرجى تحديد رقم الطاولة (table_id)',
             ], 400);
         }
 
-        $query = OrderCart::where('cashier_id', $cashierId);
-
-        if ($request->filled('module')) {
-            $query->where('module', $request->query('module'));
+        $hallTable = HallTable::with('branch')->find((int) $tableId);
+        if (! $hallTable) {
+            return response()->json([
+                'status' => false,
+                'message' => 'الطاولة غير موجودة',
+            ], 404);
         }
 
-        $query->delete();
+        if ($response = $this->validateGeofence($request, $hallTable->branch)) {
+            return $response;
+        }
+
+        OrderCart::where('hall_table_id', $tableId)->delete();
 
         return response()->json([
             'status' => true,

@@ -14,6 +14,15 @@ class HallTableResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $qrUrl = null;
+        if ($this->qr) {
+            if (str_starts_with($this->qr, 'http://') || str_starts_with($this->qr, 'https://')) {
+                $qrUrl = $this->qr;
+            } else {
+                $qrUrl = url('storage/'.ltrim($this->qr, '/'));
+            }
+        }
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -28,6 +37,7 @@ class HallTableResource extends JsonResource
                 'name' => $this->hall->name,
             ] : null,
             'status' => (bool) $this->status,
+            'qr' => $qrUrl,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

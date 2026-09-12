@@ -152,7 +152,7 @@ test('cashier cart index calculates item totals and grand totals correctly', fun
         ->assertStatus(201);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
-        ->getJson('/api/cashier/cart?lang=ar')
+        ->getJson('/api/cashier/cart?module=dinein&lang=ar')
         ->assertStatus(200)
         ->assertJsonStructure([
             'status',
@@ -198,7 +198,7 @@ test('cart is fetched by cashier_id so another cashier_man on the same desk sees
     $secondToken = JWTAuth::fromUser($secondCashierMan);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$secondToken)
-        ->getJson('/api/cashier/cart')
+        ->getJson('/api/cashier/cart?module=takeaway')
         ->assertStatus(200);
 
     expect(count($response->json('data')))->toBe(1);
@@ -247,8 +247,68 @@ test('cashier can update, delete, and clear cart items', function () {
         ->assertStatus(200);
 
     $getRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
-        ->getJson('/api/cashier/cart')
+        ->getJson('/api/cashier/cart?module=delivery')
         ->assertStatus(200);
 
     expect(count($getRes->json('data')))->toBe(0);
+});
+
+test('cashier cart index requires valid module and filters by specified module only', function () {
+    // Missing module returns 422
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart')
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['module']);
+
+    // Invalid module returns 422
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=table_order')
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['module']);
+
+    // Add 1 item for takeaway, 1 for dinein, 1 for delivery
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])->assertStatus(201);
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'product_id' => $this->product->id,
+            'quantity' => 2,
+        ])->assertStatus(201);
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'delivery',
+            'product_id' => $this->product->id,
+            'quantity' => 3,
+        ])->assertStatus(201);
+
+    // Fetch takeaway only
+    $takeawayRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=takeaway')
+        ->assertStatus(200);
+    expect($takeawayRes->json('data'))->toHaveCount(1);
+    expect($takeawayRes->json('data.0.module'))->toBe('takeaway');
+    expect($takeawayRes->json('data.0.quantity'))->toBe(1);
+
+    // Fetch dinein only
+    $dineinRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein')
+        ->assertStatus(200);
+    expect($dineinRes->json('data'))->toHaveCount(1);
+    expect($dineinRes->json('data.0.module'))->toBe('dinein');
+    expect($dineinRes->json('data.0.quantity'))->toBe(2);
+
+    // Fetch delivery only
+    $deliveryRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=delivery')
+        ->assertStatus(200);
+    expect($deliveryRes->json('data'))->toHaveCount(1);
+    expect($deliveryRes->json('data.0.module'))->toBe('delivery');
+    expect($deliveryRes->json('data.0.quantity'))->toBe(3);
 });

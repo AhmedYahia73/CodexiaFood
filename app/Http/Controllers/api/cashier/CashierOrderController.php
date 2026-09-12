@@ -41,6 +41,7 @@ class CashierOrderController extends Controller
             'orderProducts.addons.addon',
         ])
             ->when($cashierId, fn ($q) => $q->where('cashier_id', $cashierId))
+            ->when($request->filled('module'), fn ($q) => $q->where('module', $request->input('module')))
             ->latest()
             ->paginate($request->get('per_page', 15));
 

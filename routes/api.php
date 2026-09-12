@@ -27,6 +27,8 @@ use App\Http\Controllers\api\AuthController;
 use App\Http\Controllers\api\cashier\CashierCartController;
 use App\Http\Controllers\api\cashier\CashierHomeController;
 use App\Http\Controllers\api\cashier\CashierOrderController;
+use App\Http\Controllers\api\table\TableHomeController;
+use App\Http\Controllers\api\table\TableOrderCartController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -127,3 +129,34 @@ Route::middleware(['auth:cashier_man,admin', 'role:cashier_man,cashier,admin'])-
     Route::post('orders/checkout', [CashierOrderController::class, 'checkout']);
     Route::apiResource('orders', CashierOrderController::class)->only(['index', 'show']);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Public Table Order Routes (No Auth)
+|--------------------------------------------------------------------------
+*/
+Route::prefix('table')->group(function () {
+    Route::get('categories/parents', [TableHomeController::class, 'parentCategories']);
+    Route::get('categories/sub', [TableHomeController::class, 'subCategories']);
+    Route::get('products', [TableHomeController::class, 'products']);
+    Route::get('products/{product}', [TableHomeController::class, 'productDetails']);
+    Route::get('addons', [TableHomeController::class, 'addons']);
+    Route::get('table/{hallTable}', [TableHomeController::class, 'tableInfo']);
+
+    Route::delete('cart/clear', [TableOrderCartController::class, 'clear']);
+    Route::apiResource('cart', TableOrderCartController::class);
+});
+
+Route::prefix('table-order')->group(function () {
+    Route::get('categories/parents', [TableHomeController::class, 'parentCategories']);
+    Route::get('categories/sub', [TableHomeController::class, 'subCategories']);
+    Route::get('products', [TableHomeController::class, 'products']);
+    Route::get('products/{product}', [TableHomeController::class, 'productDetails']);
+    Route::get('addons', [TableHomeController::class, 'addons']);
+    Route::get('table/{hallTable}', [TableHomeController::class, 'tableInfo']);
+
+    Route::delete('cart/clear', [TableOrderCartController::class, 'clear']);
+    Route::apiResource('cart', TableOrderCartController::class);
+});
+
+Route::get('tableOrder/{hallTable}', [TableHomeController::class, 'tableInfo']);

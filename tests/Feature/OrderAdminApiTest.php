@@ -317,3 +317,53 @@ test('admin receives properly localized names in english when requested', functi
     expect($response->json('data.products.0.variations.0.options.0.name'))->toBe('Large Size');
     expect($response->json('data.products.0.addons.0.name'))->toBe('Extra Cheddar Cheese');
 });
+
+test('admin can paginate orders and change pages successfully', function () {
+    for ($i = 1; $i <= 12; $i++) {
+        Order::create([
+            'module' => 'takeaway',
+            'is_pos' => true,
+            'total' => 100 + $i,
+            'final_price' => 100 + $i,
+        ]);
+    }
+
+    $page1Response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/admin/orders?per_page=5&page=1')
+        ->assertStatus(200);
+
+    $page1Ids = collect($page1Response->json('data'))->pluck('id')->all();
+    expect($page1Ids)->toHaveCount(5);
+
+    $page2Response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/admin/orders?per_page=5&page=2')
+        ->assertStatus(200);
+
+    $page2Ids = collect($page2Response->json('data'))->pluck('id')->all();
+    expect($page2Ids)->toHaveCount(5);
+    expect(array_intersect($page1Ids, $page2Ids))->toBeEmpty();
+
+    // Test with empty filter strings (like frontend form controls sending is_pos=&shift_id=)
+    $page2WithEmptyFilters = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/admin/orders?per_page=5&page=2&is_pos=&shift_id=&module=')
+        ->assertStatus(200);
+
+    $page2FilteredIds = collect($page2WithEmptyFilters->json('data'))->pluck('id')->all();
+    expect($page2FilteredIds)->toBe($page2Ids);
+
+    // Test with current_page parameter as sent by some UI table frameworks
+    $page2ViaCurrentPage = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/admin/orders?perPage=5&current_page=2')
+        ->assertStatus(200);
+
+    $page2CurrentPageIds = collect($page2ViaCurrentPage->json('data'))->pluck('id')->all();
+    expect($page2CurrentPageIds)->toBe($page2Ids);
+
+    // Test pos orders pagination
+    $posPage2 = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/admin/orders/pos?per_page=5&page=2')
+        ->assertStatus(200);
+
+    $posPage2Ids = collect($posPage2->json('data'))->pluck('id')->all();
+    expect($posPage2Ids)->toBe($page2Ids);
+});

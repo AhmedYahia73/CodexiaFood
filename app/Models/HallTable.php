@@ -15,6 +15,7 @@ class HallTable extends Model
         'branch_id',
         'hall_id',
         'status',
+        'qr',
     ];
 
     protected function casts(): array

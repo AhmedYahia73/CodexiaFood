@@ -1,20 +1,17 @@
 <?php
 
-namespace App\Http\Controllers\api\cashier;
+namespace App\Http\Controllers\api\table;
 
 use App\Http\Controllers\Controller;
 use App\Models\Addon;
-use App\Models\CashierMan;
 use App\Models\Category;
-use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Product;
-use App\Models\StartShift;
 use App\Services\PriceCalculatorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class CashierHomeController extends Controller
+class TableHomeController extends Controller
 {
     public function __construct(
         protected PriceCalculatorService $priceCalculator
@@ -252,143 +249,37 @@ class CashierHomeController extends Controller
     }
 
     /**
-     * Get halls.
+     * Get table information (for scanned QR code tableOrder/{id}).
      */
-    public function halls(Request $request): JsonResponse
+    public function tableInfo(Request $request, HallTable $hallTable): JsonResponse
     {
         $locale = $this->getLocale($request);
 
-        $halls = Hall::where('status', true)
-            ->latest()
-            ->get()
-            ->map(fn (Hall $hall) => [
-                'id' => $hall->id,
-                'name' => $this->getLocalized($hall->name, $locale),
-                'branch_id' => $hall->branch_id,
-                'status' => (bool) $hall->status,
-            ]);
+        $hallTable->load(['branch', 'hall']);
 
-        return response()->json([
-            'status' => true,
-            'data' => $halls,
-        ]);
-    }
-
-    /**
-     * Get hall tables filterable by hall_id.
-     */
-    public function hallTables(Request $request): JsonResponse
-    {
-        $locale = $this->getLocale($request);
-
-        $query = HallTable::where('status', true);
-
-        if ($request->filled('hall_id')) {
-            $query->where('hall_id', $request->query('hall_id'));
-        }
-
-        $tables = $query->get()->map(fn (HallTable $table) => [
-            'id' => $table->id,
-            'name' => $this->getLocalized($table->name, $locale),
-            'hall_id' => $table->hall_id,
-            'branch_id' => $table->branch_id,
-            'status' => (bool) $table->status,
-            'qr' => $this->formatImageUrl($table->qr),
-        ]);
-
-        return response()->json([
-            'status' => true,
-            'data' => $tables,
-        ]);
-    }
-
-    /**
-     * Start a new shift for the cashier.
-     */
-    public function startShift(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'cashier_id' => 'required|exists:cashiers,id',
-            'cashier_man_id' => 'nullable|exists:cashier_men,id',
-        ]);
-
-        $cashierMan = auth()->user();
-        $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
-        $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
-
-        $hasOpenShift = StartShift::where('cashier_man_id', $cashierManId)
-            ->where('branch_id', $branchId)
-            ->whereNull('end')
-            ->exists();
-
-        if ($hasOpenShift) {
-            return response()->json([
-                'status' => false,
-                'message' => 'يرجى غلق الشيفت السابق اولا',
-            ], 400);
-        }
-
-        if ($cashierMan) {
-            $cashierMan->update([
-                'cashier_id' => $validated['cashier_id'],
-            ]);
-        }
-
-        $startShift = StartShift::create([
-            'start' => now(),
-            'end' => null,
-            'branch_id' => $branchId,
-            'cashier_id' => $validated['cashier_id'],
-            'cashier_man_id' => $cashierManId,
-        ]);
-
-        return response()->json([
-            'status' => true,
-            'message' => 'تم بدء الشيفت بنجاح',
-            'data' => $startShift->load(['branch', 'cashier', 'cashierMan']),
-        ], 201);
-    }
-
-    /**
-     * End the current open shift for the cashier.
-     */
-    public function endShift(Request $request): JsonResponse
-    {
-        $cashierMan = auth()->user();
-        $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
-        $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
-
-        $openShift = StartShift::where('cashier_man_id', $cashierManId)
-            ->where('branch_id', $branchId)
-            ->whereNull('end')
-            ->latest('start')
-            ->first();
-
-        if (! $openShift) {
-            return response()->json([
-                'status' => false,
-                'message' => 'لا يوجد شيفت مفتوح حالياً',
-            ], 400);
-        }
-
-        $openShift->update([
-            'end' => now(),
-        ]);
-
-        if ($cashierMan) {
-            $cashierMan->update([
-                'cashier_id' => null,
-            ]);
-        } elseif ($cashierManId) {
-            CashierMan::where('id', $cashierManId)->update([
-                'cashier_id' => null,
-            ]);
+        $qrUrl = null;
+        if ($hallTable->qr) {
+            $qrUrl = str_starts_with($hallTable->qr, 'http')
+                ? $hallTable->qr
+                : url('storage/'.ltrim($hallTable->qr, '/'));
         }
 
         return response()->json([
             'status' => true,
-            'message' => 'تم إنهاء الشيفت بنجاح',
-            'data' => $openShift->fresh(['branch', 'cashier', 'cashierMan']),
+            'data' => [
+                'id' => $hallTable->id,
+                'name' => $hallTable->name,
+                'status' => (bool) $hallTable->status,
+                'qr' => $qrUrl,
+                'branch' => $hallTable->branch ? [
+                    'id' => $hallTable->branch->id,
+                    'name' => $this->getLocalized($hallTable->branch->name, $locale),
+                ] : null,
+                'hall' => $hallTable->hall ? [
+                    'id' => $hallTable->hall->id,
+                    'name' => $this->getLocalized($hallTable->hall->name, $locale),
+                ] : null,
+            ],
         ]);
     }
 }

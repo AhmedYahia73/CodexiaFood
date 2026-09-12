@@ -82,6 +82,12 @@ test('admin can perform CRUD on Admin model', function () {
 });
 
 test('admin can perform CRUD on Branch model with bilingual name and user_name', function () {
+    $initialLocation = [
+        ['lat' => 30.0444, 'lng' => 31.2357],
+        ['lat' => 30.0450, 'lng' => 31.2360],
+        ['lat' => 30.0440, 'lng' => 31.2370],
+    ];
+
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/branches', [
             'name' => [
@@ -90,6 +96,7 @@ test('admin can perform CRUD on Branch model with bilingual name and user_name',
             ],
             'user_name' => 'main_branch_01',
             'address' => '123 Main St',
+            'location' => $initialLocation,
             'watts' => '01000000000',
             'facebook' => 'fb.com/mainbranch',
             'password' => 'branchpass',
@@ -98,7 +105,8 @@ test('admin can perform CRUD on Branch model with bilingual name and user_name',
     $storeResponse->assertStatus(201)
         ->assertJsonPath('data.name.ar', 'الفرع الرئيسي')
         ->assertJsonPath('data.name.en', 'Main Branch')
-        ->assertJsonPath('data.user_name', 'main_branch_01');
+        ->assertJsonPath('data.user_name', 'main_branch_01')
+        ->assertJsonPath('data.location', $initialLocation);
 
     $branchId = $storeResponse->json('data.id');
 
@@ -106,9 +114,15 @@ test('admin can perform CRUD on Branch model with bilingual name and user_name',
         ->getJson("/api/admin/branches/{$branchId}")
         ->assertStatus(200)
         ->assertJsonPath('data.name.en', 'Main Branch')
-        ->assertJsonPath('data.user_name', 'main_branch_01');
+        ->assertJsonPath('data.user_name', 'main_branch_01')
+        ->assertJsonPath('data.location', $initialLocation);
 
-    // Update branch with password encryption & user_name
+    $updatedLocation = [
+        ['lat' => 30.0500, 'lng' => 31.2400],
+        ['lat' => 30.0550, 'lng' => 31.2450],
+    ];
+
+    // Update branch with password encryption, user_name & location
     $updateResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->putJson("/api/admin/branches/{$branchId}", [
             'name' => [
@@ -116,12 +130,14 @@ test('admin can perform CRUD on Branch model with bilingual name and user_name',
                 'en' => 'Updated Main Branch',
             ],
             'user_name' => 'updated_branch_01',
+            'location' => $updatedLocation,
             'password' => 'newbranchpass123',
         ]);
 
     $updateResponse->assertStatus(200)
         ->assertJsonPath('data.name.en', 'Updated Main Branch')
-        ->assertJsonPath('data.user_name', 'updated_branch_01');
+        ->assertJsonPath('data.user_name', 'updated_branch_01')
+        ->assertJsonPath('data.location', $updatedLocation);
 
     // Verify branch can log in with user_name and new encrypted password
     $loginResponse = $this->postJson('/api/auth/login', [
@@ -349,10 +365,29 @@ test('admin can perform CRUD on HallTable model with branches & halls select opt
     expect($selectHalls[0])->toHaveKeys(['id', 'name']);
 
     $tableId = $storeResponse->json('data.id');
+    $qrUrl = $storeResponse->json('data.qr');
+
+    expect($qrUrl)->not->toBeNull();
+    expect($qrUrl)->toContain("/storage/qrcodes/tables/table_{$tableId}.svg");
+    Storage::disk('public')->assertExists("qrcodes/tables/table_{$tableId}.svg");
+
+    // Verify show endpoint returns the qr code url
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson("/api/admin/hall-tables/{$tableId}")
+        ->assertStatus(200)
+        ->assertJsonPath('data.qr', $qrUrl);
+
+    // Verify index endpoint returns qr in collection
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/admin/hall-tables')
+        ->assertStatus(200)
+        ->assertJsonPath('data.0.qr', $qrUrl);
 
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->deleteJson("/api/admin/hall-tables/{$tableId}")
         ->assertStatus(200);
+
+    Storage::disk('public')->assertMissing("qrcodes/tables/table_{$tableId}.svg");
 });
 
 test('admin can fetch dedicated select-options for all controllers returning strictly id and name', function () {
