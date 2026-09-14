@@ -112,9 +112,10 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
 | Cashier Protected Routes (role = cashier_man, cashier, admin)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth:cashier_man,admin', 'role:cashier_man,cashier,admin'])->prefix('cashier')->group(function () {
+Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cashier')->group(function () {
     Route::get('categories/parents', [CashierHomeController::class, 'parentCategories']);
     Route::get('categories/sub', [CashierHomeController::class, 'subCategories']);
+    Route::get('cashiers', [CashierHomeController::class, 'cashiers']);
     Route::get('products', [CashierHomeController::class, 'products']);
     Route::get('products/{product}', [CashierHomeController::class, 'productDetails']);
     Route::get('addons', [CashierHomeController::class, 'addons']);

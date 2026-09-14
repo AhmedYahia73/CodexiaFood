@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\cashier;
 
 use App\Http\Controllers\Controller;
 use App\Models\Addon;
+use App\Models\Cashier;
 use App\Models\CashierMan;
 use App\Models\Category;
 use App\Models\Hall;
@@ -106,6 +107,20 @@ class CashierHomeController extends Controller
         return response()->json([
             'status' => true,
             'data' => $categories,
+        ]);
+    }
+
+    public function cashiers(Request $request): JsonResponse
+    {
+        $data = Cashier::get()
+            ->map(fn (Cashier $cashier) => [
+                'id' => $cashier->id,
+                'name' => $cashier->name,
+            ]);
+
+        return response()->json([
+            'status' => true,
+            'data' => $data,
         ]);
     }
 

@@ -24,13 +24,79 @@ class CashierOrderController extends Controller
     ) {}
 
     /**
-     * List orders for the current cashier.
+     * List orders for the current cashier with search and filters.
+     *
+     * @return AnonymousResourceCollection<OrderResource>
      */
     public function index(Request $request): AnonymousResourceCollection
     {
+        $validated = $request->validate([
+            /**
+             * Search by order ID / number, customer phone, or customer name.
+             *
+             * @var string
+             */
+            'search' => 'sometimes|nullable|string|max:255',
+
+            /**
+             * Filter directly by order ID.
+             *
+             * @var int
+             */
+            'id' => 'sometimes|nullable|integer',
+
+            /**
+             * Filter directly by order ID or number.
+             *
+             * @var string
+             */
+            'order_number' => 'sometimes|nullable|string|max:255',
+
+            /**
+             * Filter orders by module enum.
+             *
+             * @var string
+             *
+             * @example takeaway
+             */
+            'module' => 'sometimes|nullable|string|in:takeaway,dinein,delivery',
+
+            /**
+             * Filter directly by customer phone number.
+             *
+             * @var string
+             */
+            'phone' => 'sometimes|nullable|string|max:50',
+
+            /**
+             * Filter directly by customer name.
+             *
+             * @var string
+             */
+            'name' => 'sometimes|nullable|string|max:255',
+
+            /**
+             * Number of items per page.
+             *
+             * @var int
+             *
+             * @example 15
+             */
+            'per_page' => 'sometimes|nullable|integer|min:1|max:100',
+
+            /**
+             * Page number.
+             *
+             * @var int
+             *
+             * @example 1
+             */
+            'page' => 'sometimes|nullable|integer|min:1',
+        ]);
+
         $cashierId = auth()->user()?->cashier_id;
 
-        $orders = Order::with([
+        $query = Order::with([
             'shift',
             'cashier',
             'cashierMan',
@@ -39,11 +105,53 @@ class CashierOrderController extends Controller
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',
             'orderProducts.addons.addon',
-        ])
-            ->when($cashierId, fn ($q) => $q->where('cashier_id', $cashierId))
-            ->when($request->filled('module'), fn ($q) => $q->where('module', $request->input('module')))
-            ->latest()
-            ->paginate($request->get('per_page', 15));
+        ])->when($cashierId, function ($q) use ($cashierId) {
+            $q->where('cashier_id', $cashierId);
+        });
+
+        if (! empty($validated['module'])) {
+            $query->where('module', $validated['module']);
+        }
+
+        if (! empty($validated['id'])) {
+            $query->where('id', $validated['id']);
+        }
+
+        if (! empty($validated['order_number'])) {
+            $cleanOrderNum = ltrim(trim((string) $validated['order_number']), '#');
+            if (is_numeric($cleanOrderNum)) {
+                $query->where('id', (int) $cleanOrderNum);
+            }
+        }
+
+        if (! empty($validated['phone'])) {
+            $query->where('phone', 'like', "%{$validated['phone']}%");
+        }
+
+        if (! empty($validated['name'])) {
+            $query->where('name', 'like', "%{$validated['name']}%");
+        }
+
+        if (! empty($validated['search'])) {
+            $search = trim((string) $validated['search']);
+            $cleanId = ltrim($search, '#');
+            $isNumeric = is_numeric($cleanId);
+
+            $query->where(function ($sub) use ($search, $cleanId, $isNumeric) {
+                if ($isNumeric) {
+                    $sub->where('id', (int) $cleanId)
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%");
+                } else {
+                    $sub->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%");
+                }
+            });
+        }
+
+        $perPage = (int) ($validated['per_page'] ?? 15);
+
+        $orders = $query->latest('id')->paginate($perPage);
 
         return OrderResource::collection($orders);
     }
