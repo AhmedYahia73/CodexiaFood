@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\api\admin\AdminController;
 use App\Http\Controllers\api\admin\BranchController;
+use App\Http\Controllers\api\admin\BusinessSetupController;
 use App\Http\Controllers\api\admin\CashierController;
 use App\Http\Controllers\api\admin\CashierManController;
 use App\Http\Controllers\api\admin\CategoryController;
@@ -105,6 +106,10 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('manufacturing', [ManufactringController::class, 'index']);
     Route::post('manufacturing', [ManufactringController::class, 'manufacture']);
     Route::get('manufacturing/{manufacturingList}', [ManufactringController::class, 'show']);
+
+    Route::get('business-setup', [BusinessSetupController::class, 'index']);
+    Route::post('business-setup', [BusinessSetupController::class, 'update']);
+    Route::put('business-setup/{businessSetup?}', [BusinessSetupController::class, 'update']);
 });
 
 /*
@@ -124,6 +129,7 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::post('start-shift', [CashierHomeController::class, 'startShift']);
     Route::get('check-start-shift', [CashierHomeController::class, 'checkStartShift']);
     Route::post('end-shift', [CashierHomeController::class, 'endShift']);
+    Route::get('business-setup', [CashierHomeController::class, 'businessSetup']);
 
     Route::delete('cart/clear', [CashierCartController::class, 'clear']);
     Route::apiResource('cart', CashierCartController::class);

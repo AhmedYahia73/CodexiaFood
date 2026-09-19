@@ -39,6 +39,7 @@ class DatabaseSeeder extends Seeder
             ProductRecipeSeeder::class,
             ManufacturingListSeeder::class,
             WasteSeeder::class,
+            BusinessSetupSeeder::class,
         ]);
     }
 }

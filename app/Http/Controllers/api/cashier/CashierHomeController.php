@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\api\cashier;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\BusinessSetupResource;
 use App\Models\Addon;
+use App\Models\BusinessSetup;
 use App\Models\Cashier;
 use App\Models\CashierMan;
 use App\Models\Category;
@@ -112,10 +114,9 @@ class CashierHomeController extends Controller
 
     public function cashiers(Request $request): JsonResponse
     {
-        $data = Cashier::
-        where("branch_id", $request->user()->branch_id)
-        ->whereNull('cashier_man_id')
-        ->get()
+        $data = Cashier::where('branch_id', $request->user()->branch_id)
+            ->whereNull('cashier_man_id')
+            ->get()
             ->map(fn (Cashier $cashier) => [
                 'id' => $cashier->id,
                 'name' => $cashier->name,
@@ -334,8 +335,8 @@ class CashierHomeController extends Controller
         $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
         $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
 
-        $cashier = Cashier::where("cashier_man_id", $cashierManId)->first();
-        if($cashier && $cashier->id != $validated['cashier_id']){
+        $cashier = Cashier::where('cashier_man_id', $cashierManId)->first();
+        if ($cashier && $cashier->id != $validated['cashier_id']) {
             return response()->json([
                 'status' => false,
                 'message' => 'هذا الكاشير مرتبط بكاشير مان اخر',
@@ -379,7 +380,7 @@ class CashierHomeController extends Controller
      * Start a new shift for the cashier.
      */
     public function checkStartShift(Request $request): JsonResponse
-    { 
+    {
 
         $cashierMan = auth()->user();
         $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
@@ -424,7 +425,7 @@ class CashierHomeController extends Controller
             ], 400);
         }
 
-        Cashier::where("cashier_man_id", $cashierManId)->update([
+        Cashier::where('cashier_man_id', $cashierManId)->update([
             'cashier_man_id' => null,
         ]);
         $openShift->update([
@@ -445,6 +446,19 @@ class CashierHomeController extends Controller
             'status' => true,
             'message' => 'تم إنهاء الشيفت بنجاح',
             'data' => $openShift->fresh(['branch', 'cashier', 'cashierMan']),
+        ]);
+    }
+
+    /**
+     * Get business setup details for cashier.
+     */
+    public function businessSetup(): JsonResponse
+    {
+        $businessSetup = BusinessSetup::first();
+
+        return response()->json([
+            'status' => true,
+            'data' => $businessSetup ? new BusinessSetupResource($businessSetup) : null,
         ]);
     }
 }

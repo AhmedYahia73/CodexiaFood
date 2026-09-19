@@ -2,6 +2,7 @@
 
 use App\Models\Addon;
 use App\Models\Branch;
+use App\Models\BusinessSetup;
 use App\Models\CashierMan;
 use App\Models\Category;
 use App\Models\Discount;
@@ -331,4 +332,47 @@ test('cashier can fetch halls and hall-tables with hall_id filter', function () 
     $tableIds = collect($tablesRes->json('data'))->pluck('id')->all();
     expect($tableIds)->toContain($t1->id);
     expect($tableIds)->not->toContain($t2->id);
+});
+
+test('cashier man can fetch business setup via cashier api and only get method is allowed', function () {
+    // 1. Unauthenticated returns 401
+    $this->getJson('/api/cashier/business-setup')->assertStatus(401);
+
+    // 2. Authenticated when no business setup exists returns null
+    $emptyRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/business-setup')
+        ->assertStatus(200);
+
+    expect($emptyRes->json('status'))->toBeTrue()
+        ->and($emptyRes->json('data'))->toBeNull();
+
+    // 3. Create business setup and fetch
+    $setup = BusinessSetup::create([
+        'name' => 'مطعم كودكسا',
+        'phone' => '01012345678',
+        'face' => 'https://facebook.com/codexa',
+        'instagram' => 'https://instagram.com/codexa',
+        'whats' => '01012345678',
+        'logo' => 'business_setup/logo.png',
+        'description' => 'أفضل مطعم في المدينة',
+    ]);
+
+    $res = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/business-setup')
+        ->assertStatus(200);
+
+    expect($res->json('status'))->toBeTrue()
+        ->and($res->json('data.id'))->toBe($setup->id)
+        ->and($res->json('data.name'))->toBe('مطعم كودكسا')
+        ->and($res->json('data.phone'))->toBe('01012345678')
+        ->and($res->json('data.face'))->toBe('https://facebook.com/codexa')
+        ->and($res->json('data.instagram'))->toBe('https://instagram.com/codexa')
+        ->and($res->json('data.whats'))->toBe('01012345678')
+        ->and($res->json('data.logo'))->toBe(url('storage/business_setup/logo.png'))
+        ->and($res->json('data.description'))->toBe('أفضل مطعم في المدينة');
+
+    // 4. POST is not allowed on cashier business-setup (display only)
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/business-setup', [])
+        ->assertStatus(405);
 });
