@@ -24,7 +24,7 @@ class HallTableController extends Controller
             'status' => true,
             'data' => [
                 'branches' => Branch::select('id', 'name')->get(),
-                'halls' => Hall::select('id', 'name')->get(),
+                'halls' => Hall::select('id', 'name', 'branch_id')->get(),
             ],
         ]);
     }
