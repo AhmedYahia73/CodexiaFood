@@ -11,9 +11,9 @@ class QrCodeService
     /**
      * Generate and store QR code for a hall table.
      */
-    public function generateForTable(HallTable $table): string
+    public function generateForTable(HallTable $table, $request): string
     {
-        $content = "tableOrder/{$table->id}";
+        $content = $request->base_url . "/table/{$table->id}";
         $directory = 'qrcodes/tables';
         $fileName = "table_{$table->id}.svg";
         $path = "{$directory}/{$fileName}";

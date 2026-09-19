@@ -45,13 +45,14 @@ class HallTableController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'branch_id' => 'nullable|exists:branches,id',
-            'hall_id' => 'nullable|exists:halls,id',
-            'status' => 'nullable|boolean',
+            'branch_id' => 'required|exists:branches,id',
+            'hall_id' => 'required|exists:halls,id',
+            'status' => 'required|boolean',
+            'base_url' => 'required|string|max:255',
         ]);
 
         $hallTable = HallTable::create($validated);
-        $this->qrCodeService->generateForTable($hallTable);
+        $this->qrCodeService->generateForTable($hallTable, $request);
 
         return response()->json([
             'status' => true,
@@ -83,12 +84,13 @@ class HallTableController extends Controller
             'branch_id' => 'nullable|exists:branches,id',
             'hall_id' => 'nullable|exists:halls,id',
             'status' => 'nullable|boolean',
+            'base_url' => 'required|string|max:255',
         ]);
 
         $hallTable->update($validated);
 
         if (! $hallTable->qr) {
-            $this->qrCodeService->generateForTable($hallTable);
+            $this->qrCodeService->generateForTable($hallTable, $request);
         }
 
         return response()->json([
