@@ -343,7 +343,7 @@ class CashierHomeController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'يرجى غلق الشيفت السابق اولا',
-            ], 400);
+            ]);
         }
 
         if ($cashierMan) {
