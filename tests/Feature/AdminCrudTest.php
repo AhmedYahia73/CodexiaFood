@@ -217,6 +217,33 @@ test('admin can perform CRUD on Delivery model with storage url images array', f
     expect($images[0])->toContain('storage/deliveries/');
 
     $deliveryId = $storeResponse->json('data.id');
+    $firstImageUrl = $images[0];
+    $secondImageUrl = $images[1];
+
+    // 1. Test updating: deleting first image via deleted_images
+    $deleteImgResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->putJson("/api/admin/deliveries/{$deliveryId}", [
+            'deleted_images' => [$firstImageUrl],
+        ]);
+
+    $deleteImgResponse->assertStatus(200);
+    $updatedImages = $deleteImgResponse->json('data.id_images');
+    expect($updatedImages)->toBeArray()->toHaveCount(1);
+    expect($updatedImages[0])->toBe($secondImageUrl);
+
+    // 2. Test updating: adding a new image while preserving existing via existing_images
+    $file3 = UploadedFile::fake()->image('id3.jpg');
+    $addImageResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->putJson("/api/admin/deliveries/{$deliveryId}", [
+            'existing_images' => [$secondImageUrl],
+            'id_images' => [$file3],
+        ]);
+
+    $addImageResponse->assertStatus(200);
+    $finalImages = $addImageResponse->json('data.id_images');
+    expect($finalImages)->toBeArray()->toHaveCount(2);
+    expect($finalImages[0])->toBe($secondImageUrl);
+    expect($finalImages[1])->toContain('storage/deliveries/');
 
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->deleteJson("/api/admin/deliveries/{$deliveryId}")
