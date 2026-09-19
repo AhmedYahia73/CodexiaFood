@@ -122,6 +122,7 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::get('halls', [CashierHomeController::class, 'halls']);
     Route::get('hall-tables', [CashierHomeController::class, 'hallTables']);
     Route::post('start-shift', [CashierHomeController::class, 'startShift']);
+    Route::get('check-start-shift', [CashierHomeController::class, 'checkStartShift']);
     Route::post('end-shift', [CashierHomeController::class, 'endShift']);
 
     Route::delete('cart/clear', [CashierCartController::class, 'clear']);

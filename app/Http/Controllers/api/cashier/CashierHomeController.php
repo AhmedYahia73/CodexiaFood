@@ -365,6 +365,33 @@ class CashierHomeController extends Controller
     }
 
     /**
+     * Start a new shift for the cashier.
+     */
+    public function checkStartShift(Request $request): JsonResponse
+    { 
+
+        $cashierMan = auth()->user();
+        $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
+
+        $hasOpenShift = StartShift::where('cashier_man_id', $cashierMan->id)
+            ->where('branch_id', $branchId)
+            ->whereNull('end')
+            ->exists();
+
+        if ($hasOpenShift) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى غلق الشيفت السابق اولا',
+            ], 400);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تقدر تبدأ الشيفت',
+        ], 201);
+    }
+
+    /**
      * End the current open shift for the cashier.
      */
     public function endShift(Request $request): JsonResponse
