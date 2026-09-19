@@ -334,6 +334,14 @@ class CashierHomeController extends Controller
         $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
         $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
 
+        $cashier = Cashier::where("cashier_man_id", $cashierManId)->first();
+        if($cashier && $cashier->id != $validated['cashier_id']){
+            return response()->json([
+                'status' => false,
+                'message' => 'هذا الكاشير مرتبط بكاشير مان اخر',
+            ]);
+
+        }
         $hasOpenShift = StartShift::where('cashier_man_id', $cashierManId)
             ->where('branch_id', $branchId)
             ->whereNull('end')
@@ -385,7 +393,7 @@ class CashierHomeController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'يرجى غلق الشيفت السابق اولا',
-            ], 400);
+            ]);
         }
 
         return response()->json([
@@ -416,6 +424,9 @@ class CashierHomeController extends Controller
             ], 400);
         }
 
+        Cashier::where("cashier_man_id", $cashierManId)->update([
+            'cashier_man_id' => null,
+        ]);
         $openShift->update([
             'end' => now(),
         ]);
