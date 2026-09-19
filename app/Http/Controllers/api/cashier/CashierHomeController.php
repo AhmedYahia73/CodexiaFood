@@ -112,7 +112,10 @@ class CashierHomeController extends Controller
 
     public function cashiers(Request $request): JsonResponse
     {
-        $data = Cashier::get()
+        $data = Cashier::
+        where("branch_id", $request->user()->branch_id)
+        ->whereNull('cashier_man_id')
+        ->get()
             ->map(fn (Cashier $cashier) => [
                 'id' => $cashier->id,
                 'name' => $cashier->name,
