@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Purchase extends Model
 {
@@ -15,7 +16,10 @@ class Purchase extends Model
         'product_recipe_id',
         'quantity',
         'cost',
+        'total_cost',
+        'total_quantity',
         'receipt',
+        'notes',
     ];
 
     protected function casts(): array
@@ -25,7 +29,22 @@ class Purchase extends Model
             'product_recipe_id' => 'array',
             'quantity' => 'decimal:2',
             'cost' => 'decimal:2',
+            'total_cost' => 'decimal:2',
+            'total_quantity' => 'decimal:2',
         ];
+    }
+
+    /**
+     * Relationship to PurchaseItems.
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(PurchaseItem::class, 'purchase_id');
+    }
+
+    public function purchaseItems(): HasMany
+    {
+        return $this->items();
     }
 
     /**

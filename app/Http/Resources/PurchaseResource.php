@@ -2,8 +2,6 @@
 
 namespace App\Http\Resources;
 
-use App\Models\Material;
-use App\Models\ProductRecipe;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -16,44 +14,20 @@ class PurchaseResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $lang = $request->query('lang')
-            ?? $request->header('Accept-Language')
-            ?? $request->header('lang')
-            ?? app()->getLocale();
-        $locale = str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
-
-        $materialIds = is_array($this->material_ids) ? $this->material_ids : [];
-        $materials = empty($materialIds)
-            ? []
-            : Material::whereIn('id', $materialIds)->get()->map(function ($item) use ($locale) {
-                return [
-                    'id' => $item->id,
-                    'name' => is_array($item->name) ? ($item->name[$locale] ?? $item->name['ar'] ?? $item->name['en'] ?? '') : $item->name,
-                    'stock' => (int) $item->stock,
-                ];
-            });
-
-        $recipeIds = is_array($this->product_recipe_id) ? $this->product_recipe_id : ($this->product_recipe_id ? [$this->product_recipe_id] : []);
-        $recipes = empty($recipeIds)
-            ? []
-            : ProductRecipe::whereIn('id', $recipeIds)->get()->map(function ($item) use ($locale) {
-                return [
-                    'id' => $item->id,
-                    'name' => is_array($item->name) ? ($item->name[$locale] ?? $item->name['ar'] ?? $item->name['en'] ?? '') : $item->name,
-                    'stock' => (int) $item->stock,
-                ];
-            });
+        $items = $this->items ?? collect();
+        $totalCost = (float) ($this->total_cost ?? $this->cost ?? $items->sum('cost'));
+        $totalQuantity = (float) ($this->total_quantity ?? $this->quantity ?? $items->sum('quantity'));
 
         return [
             'id' => $this->id,
-            'material_ids' => $this->material_ids,
-            'product_recipe_id' => $this->product_recipe_id,
-            'quantity' => (float) $this->quantity,
-            'cost' => (float) $this->cost,
             'receipt' => $this->receipt,
             'receipt_url' => $this->receipt_url,
-            'materials' => $materials,
-            'product_recipes' => $recipes,
+            'total_cost' => $totalCost,
+            'total_quantity' => $totalQuantity,
+            'cost' => $totalCost,
+            'quantity' => $totalQuantity,
+            'notes' => $this->notes,
+            'items' => PurchaseItemResource::collection($this->whenLoaded('items', fn () => $this->items, $this->items)),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

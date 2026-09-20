@@ -18,10 +18,14 @@ class PurchaseController extends Controller
     use image;
 
     /**
-     * Get select options (Materials and ProductRecipes) localized by lang key ('ar' or 'en').
+     * Get select options (Materials and ProductRecipes) with id and name localized by lang.
      */
     public function selectOptions(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
         return response()->json([
             'status' => true,
             'data' => $this->getSelectOptionsData($request),
@@ -29,28 +33,62 @@ class PurchaseController extends Controller
     }
 
     /**
-     * Display a listing of purchases.
+     * Display a listing of purchases with pagination and loaded items.
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $purchases = Purchase::latest()->paginate($request->get('per_page', 15));
+        $request->validate([
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:-1',
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
+        $perPage = (int) $request->get('per_page', 15);
+        $page = (int) $request->get('page', 1);
+
+        $query = Purchase::with(['items.material', 'items.productRecipe'])->latest();
+
+        $purchases = $perPage === -1
+            ? $query->paginate(perPage: 1000, page: 1)
+            : $query->paginate(perPage: $perPage, page: $page);
 
         return PurchaseResource::collection($purchases)->additional([
+            'status' => true,
             'select_options' => $this->getSelectOptionsData($request),
         ]);
     }
 
     /**
-     * Store newly created purchase(s) (supports single row or multi-rows).
-     * Automatically increments the stock of selected Material(s) and/or ProductRecipe(s).
+     * Store newly created purchase with individual items.
+     * Each item has its own quantity and cost, and increments the stock of its selected Material/ProductRecipe.
      */
     public function store(Request $request): JsonResponse
     {
-        // 1. Extract and validate receipt image if provided
-        $request->validate([
+        // 1. Normalize items if passed as JSON string (common in multipart/form-data with receipt image)
+        $this->normalizeItemsInput($request);
+
+        // 2. Validate request parameters (explicit keys for Scramble)
+        $validated = $request->validate([
             'receipt' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
+            'notes' => 'nullable|string',
+            'items' => 'required|array|min:1',
+            'items.*.material_id' => 'nullable|integer|exists:materials,id',
+            'items.*.product_recipe_id' => 'nullable|integer|exists:product_recipes,id',
+            'items.*.quantity' => 'required|numeric|min:0.01',
+            'items.*.cost' => 'required|numeric|min:0',
         ]);
 
+        // 3. Ensure each item specifies at least one material_id or product_recipe_id
+        foreach ($validated['items'] as $index => $item) {
+            if (empty($item['material_id']) && empty($item['product_recipe_id'])) {
+                return response()->json([
+                    'status' => false,
+                    'message' => "يجب تحديد مادة خام (material_id) أو وصفة منتج (product_recipe_id) أو كليهما في العنصر رقم {$index}.",
+                ], 422);
+            }
+        }
+
+        // 4. Handle receipt image upload
         $receiptPath = null;
         if ($request->hasFile('receipt')) {
             $receiptPath = $this->upload($request, 'receipt', 'purchases');
@@ -58,80 +96,62 @@ class PurchaseController extends Controller
             $receiptPath = $request->input('receipt');
         }
 
-        // 2. Normalize rows from request (can be single row or multi-rows in 'items' or 'purchases')
-        $rows = $this->normalizeRows($request);
+        // 5. Create Purchase, PurchaseItems, and increment stocks inside a DB transaction
+        $purchase = DB::transaction(function () use ($validated, $receiptPath) {
+            $totalCost = 0;
+            $totalQuantity = 0;
 
-        if (empty($rows)) {
-            return response()->json([
-                'status' => false,
-                'message' => 'يجب إرسال بيانات الشراء.',
-            ], 422);
-        }
+            $purchase = Purchase::create([
+                'receipt' => $receiptPath,
+                'notes' => $validated['notes'] ?? null,
+                'total_cost' => 0,
+                'total_quantity' => 0,
+            ]);
 
-        // 3. Validate each row
-        $validatedItems = [];
-        foreach ($rows as $index => $row) {
-            $normalizedRow = $this->validateAndNormalizeRow($row, $index);
-            if ($normalizedRow instanceof JsonResponse) {
-                return $normalizedRow; // Return validation error
-            }
-            $validatedItems[] = $normalizedRow;
-        }
+            foreach ($validated['items'] as $itemData) {
+                $qty = (float) $itemData['quantity'];
+                $itemCost = (float) $itemData['cost'];
+                $materialId = ! empty($itemData['material_id']) ? (int) $itemData['material_id'] : null;
+                $recipeId = ! empty($itemData['product_recipe_id']) ? (int) $itemData['product_recipe_id'] : null;
 
-        // 4. Execute creation and stock increment in a DB transaction
-        $createdPurchases = DB::transaction(function () use ($validatedItems, $receiptPath) {
-            $results = [];
-
-            foreach ($validatedItems as $item) {
-                $materialIds = $item['material_ids'];
-                $recipeIds = $item['product_recipe_id'];
-                $quantity = $item['quantity'];
-                $cost = $item['cost'];
-                $itemReceipt = $item['receipt'] ?? $receiptPath;
-
-                // Increment stock for Materials
-                if (! empty($materialIds)) {
-                    foreach ($materialIds as $matId) {
-                        $material = Material::lockForUpdate()->find($matId);
-                        if ($material) {
-                            $material->increment('stock', $quantity);
-                        }
-                    }
+                // Increment Material stock by this item's quantity
+                if ($materialId) {
+                    $material = Material::lockForUpdate()->find($materialId);
+                    $material?->increment('stock', $qty);
                 }
 
-                // Increment stock for ProductRecipes
-                if (! empty($recipeIds)) {
-                    foreach ($recipeIds as $recId) {
-                        $recipe = ProductRecipe::lockForUpdate()->find($recId);
-                        if ($recipe) {
-                            $recipe->increment('stock', $quantity);
-                        }
-                    }
+                // Increment ProductRecipe stock by this item's quantity
+                if ($recipeId) {
+                    $recipe = ProductRecipe::lockForUpdate()->find($recipeId);
+                    $recipe?->increment('stock', $qty);
                 }
 
-                // Create Purchase record
-                $purchase = Purchase::create([
-                    'material_ids' => ! empty($materialIds) ? array_values(array_unique($materialIds)) : null,
-                    'product_recipe_id' => ! empty($recipeIds) ? array_values(array_unique($recipeIds)) : null,
-                    'quantity' => $quantity,
-                    'cost' => $cost,
-                    'receipt' => $itemReceipt,
+                // Create PurchaseItem
+                $purchase->items()->create([
+                    'material_id' => $materialId,
+                    'product_recipe_id' => $recipeId,
+                    'quantity' => $qty,
+                    'cost' => $itemCost,
                 ]);
 
-                $results[] = $purchase;
+                $totalCost += $itemCost;
+                $totalQuantity += $qty;
             }
 
-            return $results;
-        });
+            $purchase->update([
+                'total_cost' => $totalCost,
+                'total_quantity' => $totalQuantity,
+                'cost' => $totalCost,
+                'quantity' => $totalQuantity,
+            ]);
 
-        $isMultiple = count($createdPurchases) > 1;
+            return $purchase;
+        });
 
         return response()->json([
             'status' => true,
-            'message' => $isMultiple ? 'Purchases created successfully.' : 'Purchase created successfully.',
-            'data' => $isMultiple
-                ? PurchaseResource::collection(collect($createdPurchases))
-                : new PurchaseResource($createdPurchases[0]),
+            'message' => 'Purchase created successfully.',
+            'data' => new PurchaseResource($purchase->load(['items.material', 'items.productRecipe'])),
             'select_options' => $this->getSelectOptionsData($request),
         ], 201);
     }
@@ -143,24 +163,41 @@ class PurchaseController extends Controller
     {
         return response()->json([
             'status' => true,
-            'data' => new PurchaseResource($purchase),
+            'data' => new PurchaseResource($purchase->load(['items.material', 'items.productRecipe'])),
         ]);
     }
 
     /**
-     * Remove the specified purchase from storage.
+     * Remove the specified purchase from storage and restore stock.
      */
     public function destroy(Purchase $purchase): JsonResponse
     {
-        if ($purchase->receipt) {
-            $this->deleteImage($purchase->receipt);
-        }
+        DB::transaction(function () use ($purchase) {
+            $items = $purchase->items()->get();
 
-        $purchase->delete();
+            // Restore/decrement stock by the purchased quantity
+            foreach ($items as $item) {
+                if ($item->material_id) {
+                    $material = Material::lockForUpdate()->find($item->material_id);
+                    $material?->decrement('stock', $item->quantity);
+                }
+
+                if ($item->product_recipe_id) {
+                    $recipe = ProductRecipe::lockForUpdate()->find($item->product_recipe_id);
+                    $recipe?->decrement('stock', $item->quantity);
+                }
+            }
+
+            if ($purchase->receipt) {
+                $this->deleteImage($purchase->receipt);
+            }
+
+            $purchase->delete();
+        });
 
         return response()->json([
             'status' => true,
-            'message' => 'Purchase deleted successfully.',
+            'message' => 'Purchase deleted successfully and stock restored.',
         ]);
     }
 
@@ -207,9 +244,9 @@ class PurchaseController extends Controller
     }
 
     /**
-     * Normalize request payload into an array of purchase row items.
+     * Normalize items input from string or root parameters.
      */
-    private function normalizeRows(Request $request): array
+    private function normalizeItemsInput(Request $request): void
     {
         $inputItems = $request->input('items') ?? $request->input('purchases');
 
@@ -217,115 +254,20 @@ class PurchaseController extends Controller
             if (is_string($inputItems)) {
                 $decoded = json_decode($inputItems, true);
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                    return $decoded;
+                    $request->merge(['items' => $decoded]);
                 }
-            } elseif (is_array($inputItems)) {
-                return $inputItems;
             }
+        } elseif ($request->has('quantity') && ($request->has('material_id') || $request->has('product_recipe_id'))) {
+            $request->merge([
+                'items' => [
+                    [
+                        'material_id' => $request->input('material_id'),
+                        'product_recipe_id' => $request->input('product_recipe_id'),
+                        'quantity' => $request->input('quantity'),
+                        'cost' => $request->input('cost', 0),
+                    ],
+                ],
+            ]);
         }
-
-        // Check if single row sent directly in request body
-        if (
-            $request->has('material_id') ||
-            $request->has('material_ids') ||
-            $request->has('product_recipe_id') ||
-            $request->has('product_recipe_ids') ||
-            $request->has('quantity') ||
-            $request->has('cost')
-        ) {
-            return [$request->all()];
-        }
-
-        return [];
-    }
-
-    /**
-     * Validate and normalize an individual row.
-     */
-    private function validateAndNormalizeRow(array $row, int $index): array|JsonResponse
-    {
-        // Extract Material IDs
-        $materialIds = [];
-        if (! empty($row['material_ids'])) {
-            $mIds = $row['material_ids'];
-            if (is_string($mIds)) {
-                $decoded = json_decode($mIds, true);
-                $mIds = (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) ? $decoded : explode(',', $mIds);
-            }
-            $materialIds = is_array($mIds) ? array_map('intval', $mIds) : [(int) $mIds];
-        } elseif (! empty($row['material_id'])) {
-            $mId = $row['material_id'];
-            if (is_string($mId) && str_starts_with($mId, '[')) {
-                $decoded = json_decode($mId, true);
-                $materialIds = is_array($decoded) ? array_map('intval', $decoded) : [(int) $mId];
-            } else {
-                $materialIds = [(int) $mId];
-            }
-        }
-
-        // Extract ProductRecipe IDs
-        $recipeIds = [];
-        $rInput = $row['product_recipe_id'] ?? $row['product_recipe_ids'] ?? null;
-        if (! empty($rInput)) {
-            if (is_string($rInput)) {
-                $decoded = json_decode($rInput, true);
-                $rInput = (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) ? $decoded : explode(',', $rInput);
-            }
-            $recipeIds = is_array($rInput) ? array_map('intval', $rInput) : [(int) $rInput];
-        }
-
-        // Validate that at least one material or product recipe is selected (or twice/both)
-        if (empty($materialIds) && empty($recipeIds)) {
-            return response()->json([
-                'status' => false,
-                'message' => "يجب تحديد مادة خام (material_id) أو وصفة منتج (product_recipe_id) أو كليهما في العنصر رقم {$index}.",
-            ], 422);
-        }
-
-        // Verify existence of Material IDs
-        if (! empty($materialIds)) {
-            $existingCount = Material::whereIn('id', $materialIds)->count();
-            if ($existingCount !== count(array_unique($materialIds))) {
-                return response()->json([
-                    'status' => false,
-                    'message' => "إحدى المواد الخام المحددة في العنصر رقم {$index} غير موجودة.",
-                ], 422);
-            }
-        }
-
-        // Verify existence of ProductRecipe IDs
-        if (! empty($recipeIds)) {
-            $existingCount = ProductRecipe::whereIn('id', $recipeIds)->count();
-            if ($existingCount !== count(array_unique($recipeIds))) {
-                return response()->json([
-                    'status' => false,
-                    'message' => "إحدى وصفات المنتجات المحددة في العنصر رقم {$index} غير موجودة.",
-                ], 422);
-            }
-        }
-
-        // Validate Quantity
-        if (! isset($row['quantity']) || ! is_numeric($row['quantity']) || (float) $row['quantity'] <= 0) {
-            return response()->json([
-                'status' => false,
-                'message' => "يجب أن تكون الكمية (quantity) رقماً أكبر من الصفر في العنصر رقم {$index}.",
-            ], 422);
-        }
-
-        // Validate Cost
-        if (! isset($row['cost']) || ! is_numeric($row['cost']) || (float) $row['cost'] < 0) {
-            return response()->json([
-                'status' => false,
-                'message' => "يجب أن تكون التكلفة (cost) رقماً غير سالب في العنصر رقم {$index}.",
-            ], 422);
-        }
-
-        return [
-            'material_ids' => $materialIds,
-            'product_recipe_id' => $recipeIds,
-            'quantity' => (float) $row['quantity'],
-            'cost' => (float) $row['cost'],
-            'receipt' => $row['receipt'] ?? null,
-        ];
     }
 }
