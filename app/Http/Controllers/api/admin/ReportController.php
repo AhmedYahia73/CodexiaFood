@@ -21,9 +21,6 @@ class ReportController extends Controller
     public function selectOptions(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'branch_id' => 'nullable|integer|exists:branches,id',
-            'cashier_id' => 'nullable|integer|exists:cashiers,id',
-            'cashier_man_id' => 'nullable|integer|exists:cashier_men,id',
             'lang' => 'nullable|string|in:ar,en',
         ]);
 
