@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\cashier;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BusinessSetupResource;
+use App\Http\Resources\StartShiftResource;
 use App\Models\Addon;
 use App\Models\BusinessSetup;
 use App\Models\Cashier;
@@ -11,6 +12,7 @@ use App\Models\CashierMan;
 use App\Models\Category;
 use App\Models\Hall;
 use App\Models\HallTable;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\StartShift;
 use App\Services\PriceCalculatorService;
@@ -367,12 +369,14 @@ class CashierHomeController extends Controller
             'branch_id' => $branchId,
             'cashier_id' => $validated['cashier_id'],
             'cashier_man_id' => $cashierManId,
+            'default_total_amount' => 0,
+            'total_mony' => null,
         ]);
 
         return response()->json([
             'status' => true,
             'message' => 'تم بدء الشيفت بنجاح',
-            'data' => $startShift->load(['branch', 'cashier', 'cashierMan']),
+            'data' => new StartShiftResource($startShift->load(['branch', 'cashier', 'cashierMan'])),
         ], 201);
     }
 
@@ -408,12 +412,19 @@ class CashierHomeController extends Controller
      */
     public function endShift(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'total_mony' => 'required|numeric|min:0',
+            'cashier_man_id' => 'nullable|exists:cashier_men,id',
+            'branch_id' => 'nullable|exists:branches,id',
+        ]);
+
+        $totalMony = (float) $validated['total_mony'];
         $cashierMan = auth()->user();
         $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
         $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
 
         $openShift = StartShift::where('cashier_man_id', $cashierManId)
-            ->where('branch_id', $branchId)
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
             ->whereNull('end')
             ->latest('start')
             ->first();
@@ -425,11 +436,32 @@ class CashierHomeController extends Controller
             ], 400);
         }
 
+        $endTime = now();
+
+        // Calculate default_total_amount automatically from orders during the shift period
+        $ordersQuery = Order::query()
+            ->where(function ($query) use ($openShift, $endTime) {
+                $query->where('shift_id', $openShift->id)
+                    ->orWhere(function ($q) use ($openShift, $endTime) {
+                        $q->where('cashier_man_id', $openShift->cashier_man_id)
+                            ->where('cashier_id', $openShift->cashier_id)
+                            ->whereBetween('created_at', [$openShift->start, $endTime]);
+                    });
+            });
+
+        $defaultTotalAmount = round((float) $ordersQuery->sum('final_price'), 2);
+        if ($defaultTotalAmount == 0) {
+            $defaultTotalAmount = round((float) $ordersQuery->sum('total'), 2);
+        }
+
         Cashier::where('cashier_man_id', $cashierManId)->update([
             'cashier_man_id' => null,
         ]);
+
         $openShift->update([
-            'end' => now(),
+            'end' => $endTime,
+            'default_total_amount' => $defaultTotalAmount,
+            'total_mony' => $totalMony,
         ]);
 
         if ($cashierMan) {
@@ -445,7 +477,7 @@ class CashierHomeController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'تم إنهاء الشيفت بنجاح',
-            'data' => $openShift->fresh(['branch', 'cashier', 'cashierMan']),
+            'data' => new StartShiftResource($openShift->fresh(['branch', 'cashier', 'cashierMan'])),
         ]);
     }
 

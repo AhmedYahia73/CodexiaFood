@@ -21,6 +21,7 @@ use App\Http\Controllers\api\admin\ProductController;
 use App\Http\Controllers\api\admin\ProductManufactringController;
 use App\Http\Controllers\api\admin\ProductRecipeController;
 use App\Http\Controllers\api\admin\PurchaseController;
+use App\Http\Controllers\api\admin\ReportController;
 use App\Http\Controllers\api\admin\ShiftController;
 use App\Http\Controllers\api\admin\SupplierController;
 use App\Http\Controllers\api\admin\TaxController;
@@ -78,6 +79,12 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('purchases/select-options', [PurchaseController::class, 'selectOptions']);
     Route::get('manufacturing/select-options', [ManufactringController::class, 'selectOptions']);
     Route::get('manufacturing/specifications', [ManufactringController::class, 'getSpecification']);
+    Route::get('reports/start-shifts/select-options', [ReportController::class, 'selectOptions']);
+    Route::get('reports/start-shifts/lists', [ReportController::class, 'selectOptions']);
+    Route::get('start-shifts/select-options', [ReportController::class, 'selectOptions']);
+    Route::get('start-shifts/lists', [ReportController::class, 'selectOptions']);
+    Route::get('reports/start-shifts', [ReportController::class, 'startShiftReport']);
+    Route::get('start-shifts/report', [ReportController::class, 'startShiftReport']);
 
     Route::get('orders/pos', [OrderController::class, 'posOrders']);
     Route::get('orders/online', [OrderController::class, 'onlineOrders']);
