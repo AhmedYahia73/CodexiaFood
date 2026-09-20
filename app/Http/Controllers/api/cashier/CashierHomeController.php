@@ -414,13 +414,11 @@ class CashierHomeController extends Controller
     {
         $validated = $request->validate([
             'total_mony' => 'required|numeric|min:0',
-            'cashier_man_id' => 'nullable|exists:cashier_men,id',
-            'branch_id' => 'nullable|exists:branches,id',
         ]);
 
         $totalMony = (float) $validated['total_mony'];
         $cashierMan = auth()->user();
-        $cashierManId = $request->input('cashier_man_id') ?? $cashierMan?->id;
+        $cashierManId = $cashierMan?->id;
         $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
 
         $openShift = StartShift::where('cashier_man_id', $cashierManId)
