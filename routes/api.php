@@ -6,6 +6,7 @@ use App\Http\Controllers\api\admin\BusinessSetupController;
 use App\Http\Controllers\api\admin\CashierController;
 use App\Http\Controllers\api\admin\CashierManController;
 use App\Http\Controllers\api\admin\CategoryController;
+use App\Http\Controllers\api\admin\DashboardController;
 use App\Http\Controllers\api\admin\DeliveryController;
 use App\Http\Controllers\api\admin\DiscountController;
 use App\Http\Controllers\api\admin\ExpenseListController;
@@ -89,6 +90,9 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('orders/pos', [OrderController::class, 'posOrders']);
     Route::get('orders/online', [OrderController::class, 'onlineOrders']);
 
+    Route::get('dashboard', [DashboardController::class, 'index']);
+    Route::get('dashboard/statistics', [DashboardController::class, 'statistics']);
+
     Route::apiResource('admins', AdminController::class);
     Route::apiResource('branches', BranchController::class);
     Route::apiResource('cashier-men', CashierManController::class);
@@ -139,7 +143,6 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::post('start-shift', [CashierHomeController::class, 'startShift']);
     Route::get('check-start-shift', [CashierHomeController::class, 'checkStartShift']);
     Route::post('end-shift', [CashierHomeController::class, 'endShift']);
-    Route::get('business-setup', [CashierHomeController::class, 'businessSetup']);
 
     Route::delete('cart/clear', [CashierCartController::class, 'clear']);
     Route::apiResource('cart', CashierCartController::class);
@@ -148,6 +151,7 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::apiResource('orders', CashierOrderController::class)->only(['index', 'show']);
 });
 
+Route::get('business-setup', [CashierHomeController::class, 'businessSetup']);
 /*
 |--------------------------------------------------------------------------
 | Public Table Order Routes (No Auth)
@@ -177,4 +181,5 @@ Route::prefix('table-order')->group(function () {
     Route::apiResource('cart', TableOrderCartController::class);
 });
 
-Route::get('tableOrder/{hallTable}', [TableHomeController::class, 'tableInfo']);
+Route::get('tableOrder/{hallTable?}', [TableHomeController::class, 'tableInfo']);
+Route::get('table/{hallTable?}', [TableHomeController::class, 'tableInfo']);

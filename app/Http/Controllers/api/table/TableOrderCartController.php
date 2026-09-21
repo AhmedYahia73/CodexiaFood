@@ -44,9 +44,24 @@ class TableOrderCartController extends Controller
         return str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
     }
 
+    private function resolveHallTable(array $validated): ?HallTable
+    {
+        if (! empty($validated['table_code'])) {
+            return HallTable::with('branch')->where('code', $validated['table_code'])->first();
+        }
+
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+        if ($tableId) {
+            return HallTable::with('branch')->find((int) $tableId);
+        }
+
+        return null;
+    }
+
     private function cartQuery(int $tableId): Builder
     {
         return OrderCart::with([
+            'hallTable',
             'product.discount',
             'product.tax',
             'variationCarts.variation',
@@ -61,8 +76,9 @@ class TableOrderCartController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'table_id' => 'required_without:hall_table_id|nullable|integer|exists:hall_tables,id',
-            'hall_table_id' => 'nullable|integer|exists:hall_tables,id',
+            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
+            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|integer|exists:hall_tables,id',
+            'hall_table_id' => 'required_without_all:table_code,table_id|nullable|integer|exists:hall_tables,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
             'latitude' => 'nullable|numeric',
@@ -71,11 +87,11 @@ class TableOrderCartController extends Controller
             'lang' => 'nullable|string|in:ar,en',
         ]);
 
-        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
-        if (! $tableId) {
+        $hallTable = $this->resolveHallTable($validated);
+        if (! $hallTable) {
             return response()->json([
                 'status' => false,
-                'message' => 'يرجى تحديد رقم الطاولة (table_id)',
+                'message' => 'يرجى تحديد كود الطاولة (table_code)',
                 'data' => [],
                 'grand_totals' => [
                     'grand_total_price' => 0.00,
@@ -86,21 +102,13 @@ class TableOrderCartController extends Controller
             ], 400);
         }
 
-        $hallTable = HallTable::with('branch')->find((int) $tableId);
-        if (! $hallTable) {
-            return response()->json([
-                'status' => false,
-                'message' => 'الطاولة غير موجودة',
-            ], 404);
-        }
-
         if ($response = $this->validateGeofence($request, $hallTable->branch)) {
             return $response;
         }
 
         $locale = $this->getLocale($request);
 
-        $carts = $this->cartQuery((int) $tableId)->latest('id')->get();
+        $carts = $this->cartQuery($hallTable->id)->latest('id')->get();
 
         $calculatedItems = $carts->map(
             fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale)
@@ -110,6 +118,7 @@ class TableOrderCartController extends Controller
 
         return response()->json([
             'status' => true,
+            'table_code' => $hallTable->code,
             'data' => $calculatedItems,
             'grand_totals' => $grandTotals,
         ]);
@@ -121,7 +130,8 @@ class TableOrderCartController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'table_id' => 'required_without:hall_table_id|exists:hall_tables,id',
+            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
+            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|exists:hall_tables,id',
             'hall_table_id' => 'nullable|exists:hall_tables,id',
             'product_id' => 'required|exists:products,id',
             'quantity' => 'nullable|integer|min:1',
@@ -140,8 +150,13 @@ class TableOrderCartController extends Controller
             'lang' => 'nullable|string|in:ar,en',
         ]);
 
-        $tableId = $validated['table_id'] ?? $validated['hall_table_id'];
-        $hallTable = HallTable::with('branch')->findOrFail($tableId);
+        $hallTable = $this->resolveHallTable($validated);
+        if (! $hallTable) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد كود الطاولة (table_code)',
+            ], 400);
+        }
 
         if ($response = $this->validateGeofence($request, $hallTable->branch)) {
             return $response;
@@ -180,6 +195,7 @@ class TableOrderCartController extends Controller
         });
 
         $cart->load([
+            'hallTable',
             'product.discount',
             'product.tax',
             'variationCarts.variation',
@@ -188,10 +204,12 @@ class TableOrderCartController extends Controller
         ]);
 
         $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+        $calculated['table_code'] = $hallTable->code;
 
         return response()->json([
             'status' => true,
             'message' => 'تمت إضافة المنتج إلى السلة بنجاح',
+            'table_code' => $hallTable->code,
             'data' => $calculated,
         ], 201);
     }
@@ -349,8 +367,9 @@ class TableOrderCartController extends Controller
     public function clear(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'table_id' => 'required_without:hall_table_id|nullable|integer|exists:hall_tables,id',
-            'hall_table_id' => 'nullable|integer|exists:hall_tables,id',
+            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
+            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|integer|exists:hall_tables,id',
+            'hall_table_id' => 'required_without_all:table_code,table_id|nullable|integer|exists:hall_tables,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
             'latitude' => 'nullable|numeric',
@@ -358,27 +377,19 @@ class TableOrderCartController extends Controller
             'long' => 'nullable|numeric',
         ]);
 
-        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
-        if (! $tableId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'يرجى تحديد رقم الطاولة (table_id)',
-            ], 400);
-        }
-
-        $hallTable = HallTable::with('branch')->find((int) $tableId);
+        $hallTable = $this->resolveHallTable($validated);
         if (! $hallTable) {
             return response()->json([
                 'status' => false,
-                'message' => 'الطاولة غير موجودة',
-            ], 404);
+                'message' => 'يرجى تحديد كود الطاولة (table_code)',
+            ], 400);
         }
 
         if ($response = $this->validateGeofence($request, $hallTable->branch)) {
             return $response;
         }
 
-        OrderCart::where('hall_table_id', $tableId)->delete();
+        OrderCart::where('hall_table_id', $hallTable->id)->delete();
 
         return response()->json([
             'status' => true,

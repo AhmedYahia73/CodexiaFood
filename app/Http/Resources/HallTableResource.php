@@ -25,6 +25,7 @@ class HallTableResource extends JsonResource
 
         return [
             'id' => $this->id,
+            'code' => $this->code,
             'name' => $this->name,
             'branch_id' => $this->branch_id,
             'branch' => $this->relationLoaded('branch') && $this->branch ? [

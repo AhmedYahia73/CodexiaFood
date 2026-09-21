@@ -13,9 +13,9 @@ class QrCodeService
      */
     public function generateForTable(HallTable $table, $request): string
     {
-        $content = $request->base_url . "/table/{$table->id}";
+        $content = $request->base_url."/table/{$table->code}";
         $directory = 'qrcodes/tables';
-        $fileName = "table_{$table->id}.svg";
+        $fileName = "table_{$table->code}.svg";
         $path = "{$directory}/{$fileName}";
 
         $svg = QrCode::size(250)->generate($content);

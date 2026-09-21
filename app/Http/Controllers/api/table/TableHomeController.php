@@ -272,39 +272,69 @@ class TableHomeController extends Controller
     }
 
     /**
-     * Get table information (for scanned QR code tableOrder/{id}).
+     * Get table information (for scanned QR code tableOrder/{table_code_or_id} or via request param ?table_code=).
      */
-    public function tableInfo(Request $request, HallTable $hallTable): JsonResponse
+    public function tableInfo(Request $request, HallTable|string|null $hallTable = null): JsonResponse
     {
         $request->validate([
             'lang' => 'nullable|string|in:ar,en',
+            'table_code' => 'nullable|string',
+            'code' => 'nullable|string',
         ]);
+
+        $table = null;
+
+        if ($hallTable instanceof HallTable) {
+            $table = $hallTable;
+        } elseif (is_string($hallTable) && $hallTable !== '') {
+            $table = HallTable::where('code', $hallTable)
+                ->when(is_numeric($hallTable), fn ($q) => $q->orWhere('id', (int) $hallTable))
+                ->first();
+        }
+
+        if (! $table) {
+            $code = $request->input('table_code') ?? $request->input('code');
+            if ($code) {
+                $table = HallTable::where('code', $code)
+                    ->when(is_numeric($code), fn ($q) => $q->orWhere('id', (int) $code))
+                    ->first();
+            }
+        }
+
+        if (! $table) {
+            return response()->json([
+                'status' => false,
+                'message' => 'الطاولة غير موجودة',
+            ], 404);
+        }
 
         $locale = $this->getLocale($request);
 
-        $hallTable->load(['branch', 'hall']);
+        $table->load(['branch', 'hall']);
 
         $qrUrl = null;
-        if ($hallTable->qr) {
-            $qrUrl = str_starts_with($hallTable->qr, 'http')
-                ? $hallTable->qr
-                : url('storage/'.ltrim($hallTable->qr, '/'));
+        if ($table->qr) {
+            $qrUrl = str_starts_with($table->qr, 'http')
+                ? $table->qr
+                : url('storage/'.ltrim($table->qr, '/'));
         }
 
         return response()->json([
             'status' => true,
             'data' => [
-                'id' => $hallTable->id,
-                'name' => $hallTable->name,
-                'status' => (bool) $hallTable->status,
+                'id' => $table->id,
+                'table_code' => $table->code,
+                'code' => $table->code,
+                'name' => $table->name,
+                'status' => (bool) $table->status,
                 'qr' => $qrUrl,
-                'branch' => $hallTable->branch ? [
-                    'id' => $hallTable->branch->id,
-                    'name' => $this->getLocalized($hallTable->branch->name, $locale),
+                'branch' => $table->branch ? [
+                    'id' => $table->branch->id,
+                    'name' => $this->getLocalized($table->branch->name, $locale),
                 ] : null,
-                'hall' => $hallTable->hall ? [
-                    'id' => $hallTable->hall->id,
-                    'name' => $this->getLocalized($hallTable->hall->name, $locale),
+                'hall' => $table->hall ? [
+                    'id' => $table->hall->id,
+                    'name' => $this->getLocalized($table->hall->name, $locale),
                 ] : null,
             ],
         ]);
