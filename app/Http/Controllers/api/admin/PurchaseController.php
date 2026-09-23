@@ -4,8 +4,11 @@ namespace App\Http\Controllers\api\admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PurchaseResource;
+use App\Models\Branch;
 use App\Models\Material;
+use App\Models\MaterialStock;
 use App\Models\ProductRecipe;
+use App\Models\ProductRecipeStock;
 use App\Models\Purchase;
 use App\trait\image;
 use Illuminate\Http\JsonResponse;
@@ -46,7 +49,11 @@ class PurchaseController extends Controller
         $perPage = (int) $request->get('per_page', 15);
         $page = (int) $request->get('page', 1);
 
-        $query = Purchase::with(['items.material', 'items.productRecipe'])->latest();
+        $query = Purchase::with(['branch', 'items.material', 'items.productRecipe'])->latest();
+
+        if ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
 
         $purchases = $perPage === -1
             ? $query->paginate(perPage: 1000, page: 1)
@@ -69,6 +76,7 @@ class PurchaseController extends Controller
 
         // 2. Validate request parameters (explicit keys for Scramble)
         $validated = $request->validate([
+            'branch_id' => 'required|integer|exists:branches,id',
             'receipt' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'notes' => 'nullable|string',
             'items' => 'required|array|min:1',
@@ -100,8 +108,10 @@ class PurchaseController extends Controller
         $purchase = DB::transaction(function () use ($validated, $receiptPath) {
             $totalCost = 0;
             $totalQuantity = 0;
+            $branchId = (int) $validated['branch_id'];
 
             $purchase = Purchase::create([
+                'branch_id' => $branchId,
                 'receipt' => $receiptPath,
                 'notes' => $validated['notes'] ?? null,
                 'total_cost' => 0,
@@ -114,16 +124,22 @@ class PurchaseController extends Controller
                 $materialId = ! empty($itemData['material_id']) ? (int) $itemData['material_id'] : null;
                 $recipeId = ! empty($itemData['product_recipe_id']) ? (int) $itemData['product_recipe_id'] : null;
 
-                // Increment Material stock by this item's quantity
+                // Increment Material stock for this branch by this item's quantity
                 if ($materialId) {
-                    $material = Material::lockForUpdate()->find($materialId);
-                    $material?->increment('stock', $qty);
+                    $matStock = MaterialStock::firstOrCreate(
+                        ['material_id' => $materialId, 'branch_id' => $branchId],
+                        ['stock' => 0]
+                    );
+                    $matStock->increment('stock', $qty);
                 }
 
-                // Increment ProductRecipe stock by this item's quantity
+                // Increment ProductRecipe stock for this branch by this item's quantity
                 if ($recipeId) {
-                    $recipe = ProductRecipe::lockForUpdate()->find($recipeId);
-                    $recipe?->increment('stock', $qty);
+                    $recStock = ProductRecipeStock::firstOrCreate(
+                        ['product_recipe_id' => $recipeId, 'branch_id' => $branchId],
+                        ['stock' => 0]
+                    );
+                    $recStock->increment('stock', $qty);
                 }
 
                 // Create PurchaseItem
@@ -177,14 +193,20 @@ class PurchaseController extends Controller
 
             // Restore/decrement stock by the purchased quantity
             foreach ($items as $item) {
-                if ($item->material_id) {
-                    $material = Material::lockForUpdate()->find($item->material_id);
-                    $material?->decrement('stock', $item->quantity);
+                if ($item->material_id && $purchase->branch_id) {
+                    $matStock = MaterialStock::where('material_id', $item->material_id)
+                        ->where('branch_id', $purchase->branch_id)
+                        ->lockForUpdate()
+                        ->first();
+                    $matStock?->decrement('stock', $item->quantity);
                 }
 
-                if ($item->product_recipe_id) {
-                    $recipe = ProductRecipe::lockForUpdate()->find($item->product_recipe_id);
-                    $recipe?->decrement('stock', $item->quantity);
+                if ($item->product_recipe_id && $purchase->branch_id) {
+                    $recStock = ProductRecipeStock::where('product_recipe_id', $item->product_recipe_id)
+                        ->where('branch_id', $purchase->branch_id)
+                        ->lockForUpdate()
+                        ->first();
+                    $recStock?->decrement('stock', $item->quantity);
                 }
             }
 
@@ -212,32 +234,43 @@ class PurchaseController extends Controller
             ?? app()->getLocale();
 
         $locale = str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
+        $branchId = $request?->query('branch_id');
 
-        $materials = Material::select('id', 'name', 'stock')
+        $materials = Material::select('id', 'name')
             ->get()
-            ->map(function ($item) use ($locale) {
+            ->map(function ($item) use ($locale, $branchId) {
                 return [
                     'id' => $item->id,
                     'name' => is_array($item->name)
                         ? ($item->name[$locale] ?? $item->name['ar'] ?? $item->name['en'] ?? '')
                         : $item->name,
-                    'stock' => (int) $item->stock,
+                    'stock' => $branchId ? (float) $item->stockForBranch((int) $branchId) : (float) $item->totalStock(),
                 ];
             });
 
-        $productRecipes = ProductRecipe::select('id', 'name', 'stock')
+        $productRecipes = ProductRecipe::select('id', 'name')
             ->get()
-            ->map(function ($item) use ($locale) {
+            ->map(function ($item) use ($locale, $branchId) {
                 return [
                     'id' => $item->id,
                     'name' => is_array($item->name)
                         ? ($item->name[$locale] ?? $item->name['ar'] ?? $item->name['en'] ?? '')
                         : $item->name,
-                    'stock' => (int) $item->stock,
+                    'stock' => $branchId ? (float) $item->stockForBranch((int) $branchId) : (float) $item->totalStock(),
                 ];
             });
+
+        $branches = Branch::select('id', 'name')->get()->map(function ($branch) use ($locale) {
+            return [
+                'id' => $branch->id,
+                'name' => is_array($branch->name)
+                    ? ($branch->name[$locale] ?? $branch->name['ar'] ?? $branch->name['en'] ?? '')
+                    : $branch->name,
+            ];
+        });
 
         return [
+            'branches' => $branches,
             'materials' => $materials,
             'product_recipes' => $productRecipes,
         ];

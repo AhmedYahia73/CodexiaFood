@@ -14,7 +14,6 @@ class ProductRecipe extends Model
     protected $fillable = [
         'name',
         'status',
-        'stock',
         'category_id',
     ];
 
@@ -23,13 +22,27 @@ class ProductRecipe extends Model
         return [
             'name' => 'array',
             'status' => 'boolean',
-            'stock' => 'integer',
         ];
     }
 
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function stocks(): HasMany
+    {
+        return $this->hasMany(ProductRecipeStock::class);
+    }
+
+    public function stockForBranch(int $branchId): float
+    {
+        return (float) ($this->stocks()->where('branch_id', $branchId)->value('stock') ?? 0);
+    }
+
+    public function totalStock(): float
+    {
+        return (float) ($this->stocks()->sum('stock') ?? 0);
     }
 
     public function productRecipeManufacturings(): HasMany

@@ -96,4 +96,29 @@ class Branch extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Shift::class);
     }
+
+    public function materialStocks(): HasMany
+    {
+        return $this->hasMany(MaterialStock::class);
+    }
+
+    public function productRecipeStocks(): HasMany
+    {
+        return $this->hasMany(ProductRecipeStock::class);
+    }
+
+    public function manufacturingLists(): HasMany
+    {
+        return $this->hasMany(ManufacturingList::class);
+    }
+
+    public function purchases(): HasMany
+    {
+        return $this->hasMany(Purchase::class);
+    }
+
+    public function wastes(): HasMany
+    {
+        return $this->hasMany(Waste::class);
+    }
 }

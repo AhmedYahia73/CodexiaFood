@@ -20,7 +20,6 @@ class Product extends Model
         'discount_id',
         'category_id',
         'sub_category_id',
-        'stock',
     ];
 
     protected function casts(): array
@@ -29,7 +28,6 @@ class Product extends Model
             'name' => 'array',
             'description' => 'array',
             'price' => 'decimal:2',
-            'stock' => 'integer',
         ];
     }
 
@@ -66,5 +64,10 @@ class Product extends Model
     public function productManufacturings(): HasMany
     {
         return $this->hasMany(ProductManufacturing::class);
+    }
+
+    public function manufacturingLists(): HasMany
+    {
+        return $this->hasMany(ManufacturingList::class);
     }
 }

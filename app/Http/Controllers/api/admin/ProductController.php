@@ -61,7 +61,6 @@ class ProductController extends Controller
             'image' => $request->hasFile('image')
                 ? 'required|image|mimes:jpeg,png,jpg,gif,webp|max:4096'
                 : 'required|string|max:255',
-            'stock' => 'nullable|integer|min:0',
             'tax_id' => 'nullable|exists:taxes,id',
             'discount_id' => 'nullable|exists:discounts,id',
             'category_id' => 'nullable|exists:categories,id',
@@ -90,7 +89,6 @@ class ProductController extends Controller
                 'description' => $validated['description'] ?? null,
                 'price' => $validated['price'],
                 'image' => $imagePath,
-                'stock' => $validated['stock'] ?? 0,
                 'tax_id' => $validated['tax_id'] ?? null,
                 'discount_id' => $validated['discount_id'] ?? null,
                 'category_id' => $validated['category_id'] ?? null,
@@ -159,7 +157,6 @@ class ProductController extends Controller
             'image' => $request->hasFile('image')
                 ? 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096'
                 : 'nullable|string|max:255',
-            'stock' => 'nullable|integer|min:0',
             'tax_id' => 'nullable|exists:taxes,id',
             'discount_id' => 'nullable|exists:discounts,id',
             'category_id' => 'nullable|exists:categories,id',
@@ -189,9 +186,6 @@ class ProductController extends Controller
             }
             if (isset($validated['price'])) {
                 $productData['price'] = $validated['price'];
-            }
-            if ($request->has('stock')) {
-                $productData['stock'] = $validated['stock'] ?? 0;
             }
             if ($request->has('tax_id')) {
                 $productData['tax_id'] = $validated['tax_id'] ?? null;

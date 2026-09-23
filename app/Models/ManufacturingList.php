@@ -12,6 +12,7 @@ class ManufacturingList extends Model
     use HasFactory;
 
     protected $fillable = [
+        'branch_id',
         'product_id',
         'product_recipe_id',
         'count',
@@ -20,8 +21,14 @@ class ManufacturingList extends Model
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
             'count' => 'integer',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function product(): BelongsTo

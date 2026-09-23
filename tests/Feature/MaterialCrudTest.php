@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\Admin;
+use App\Models\Branch;
 use App\Models\Category;
 use App\Models\Material;
+use App\Models\MaterialStock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Tests\TestCase;
@@ -79,7 +81,6 @@ test('admin can perform full CRUD on Material model with multilingual name', fun
                 'ar' => 'طماطم طازجة',
                 'en' => 'Fresh Tomatoes',
             ],
-            'stock' => 100,
             'status' => true,
             'category_id' => $category->id,
         ]);
@@ -88,7 +89,6 @@ test('admin can perform full CRUD on Material model with multilingual name', fun
         ->assertJsonPath('status', true)
         ->assertJsonPath('data.name.ar', 'طماطم طازجة')
         ->assertJsonPath('data.name.en', 'Fresh Tomatoes')
-        ->assertJsonPath('data.stock', 100)
         ->assertJsonPath('data.status', true)
         ->assertJsonPath('data.category_id', $category->id)
         ->assertJsonPath('data.category.id', $category->id)
@@ -98,7 +98,6 @@ test('admin can perform full CRUD on Material model with multilingual name', fun
             'data' => [
                 'id',
                 'name',
-                'stock',
                 'status',
                 'category_id',
                 'category',
@@ -113,7 +112,6 @@ test('admin can perform full CRUD on Material model with multilingual name', fun
 
     $this->assertDatabaseHas('materials', [
         'id' => $materialId,
-        'stock' => 100,
         'status' => true,
         'category_id' => $category->id,
     ]);
@@ -136,7 +134,6 @@ test('admin can perform full CRUD on Material model with multilingual name', fun
                 'ar' => 'طماطم إيطالية ممتازة',
                 'en' => 'Premium Italian Tomatoes',
             ],
-            'stock' => 150,
             'status' => false,
         ]);
 
@@ -144,12 +141,10 @@ test('admin can perform full CRUD on Material model with multilingual name', fun
         ->assertJsonPath('status', true)
         ->assertJsonPath('data.name.ar', 'طماطم إيطالية ممتازة')
         ->assertJsonPath('data.name.en', 'Premium Italian Tomatoes')
-        ->assertJsonPath('data.stock', 150)
         ->assertJsonPath('data.status', false);
 
     $this->assertDatabaseHas('materials', [
         'id' => $materialId,
-        'stock' => 150,
         'status' => false,
     ]);
 
@@ -173,20 +168,17 @@ test('admin can create Material using simple string name', function () {
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/materials', [
             'name' => 'Cheddar Cheese Block',
-            'stock' => 30,
             'category_id' => $category->id,
         ]);
 
     $response->assertStatus(201)
         ->assertJsonPath('data.name.en', 'Cheddar Cheese Block')
-        ->assertJsonPath('data.name.ar', 'Cheddar Cheese Block')
-        ->assertJsonPath('data.stock', 30);
+        ->assertJsonPath('data.name.ar', 'Cheddar Cheese Block');
 });
 
 test('admin can list materials with pagination and select_options', function () {
     Material::create([
         'name' => ['ar' => 'ملح طعام', 'en' => 'Table Salt'],
-        'stock' => 50,
         'status' => true,
     ]);
 
@@ -199,7 +191,6 @@ test('admin can list materials with pagination and select_options', function () 
                 '*' => [
                     'id',
                     'name',
-                    'stock',
                     'status',
                     'category_id',
                     'category',
@@ -209,4 +200,28 @@ test('admin can list materials with pagination and select_options', function () 
             'meta',
             'select_options' => ['categories'],
         ]);
+});
+
+test('admin can view branch stock for material when branch_id is supplied', function () {
+    $branch = Branch::create([
+        'name' => ['ar' => 'فرع المعادي', 'en' => 'Maadi Branch'],
+    ]);
+
+    $material = Material::create([
+        'name' => ['ar' => 'سكر', 'en' => 'Sugar'],
+        'status' => true,
+    ]);
+
+    MaterialStock::create([
+        'material_id' => $material->id,
+        'branch_id' => $branch->id,
+        'stock' => 75.5,
+    ]);
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson("/api/admin/materials/{$material->id}?branch_id={$branch->id}");
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.stock', 75.5)
+        ->assertJsonPath('data.total_stock', 75.5);
 });

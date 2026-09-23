@@ -6,28 +6,23 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Waste extends Model
+class ProductRecipeStock extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'branch_id',
         'product_recipe_id',
-        'material_id',
-        'count',
+        'branch_id',
+        'stock',
     ];
 
     protected function casts(): array
     {
         return [
+            'product_recipe_id' => 'integer',
             'branch_id' => 'integer',
-            'count' => 'integer',
+            'stock' => 'decimal:2',
         ];
-    }
-
-    public function branch(): BelongsTo
-    {
-        return $this->belongsTo(Branch::class);
     }
 
     public function productRecipe(): BelongsTo
@@ -35,8 +30,8 @@ class Waste extends Model
         return $this->belongsTo(ProductRecipe::class);
     }
 
-    public function material(): BelongsTo
+    public function branch(): BelongsTo
     {
-        return $this->belongsTo(Material::class);
+        return $this->belongsTo(Branch::class);
     }
 }

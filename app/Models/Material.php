@@ -13,7 +13,6 @@ class Material extends Model
 
     protected $fillable = [
         'name',
-        'stock',
         'status',
         'category_id',
     ];
@@ -22,7 +21,6 @@ class Material extends Model
     {
         return [
             'name' => 'array',
-            'stock' => 'integer',
             'status' => 'boolean',
         ];
     }
@@ -30,6 +28,21 @@ class Material extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function stocks(): HasMany
+    {
+        return $this->hasMany(MaterialStock::class);
+    }
+
+    public function stockForBranch(int $branchId): float
+    {
+        return (float) ($this->stocks()->where('branch_id', $branchId)->value('stock') ?? 0);
+    }
+
+    public function totalStock(): float
+    {
+        return (float) ($this->stocks()->sum('stock') ?? 0);
     }
 
     public function productRecipeManufacturings(): HasMany

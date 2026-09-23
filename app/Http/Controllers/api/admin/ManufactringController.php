@@ -5,11 +5,14 @@ namespace App\Http\Controllers\api\admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ManufacturingListResource;
 use App\Http\Resources\ProductManufacturingResource;
+use App\Models\Branch;
 use App\Models\ManufacturingList;
 use App\Models\Material;
+use App\Models\MaterialStock;
 use App\Models\Product;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipe;
+use App\Models\ProductRecipeStock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -17,15 +20,11 @@ use Illuminate\Support\Facades\DB;
 
 class ManufactringController extends Controller
 {
-    public function selectOptions(): JsonResponse
+    public function selectOptions(Request $request): JsonResponse
     {
         return response()->json([
             'status' => true,
-            'data' => [
-                'products' => Product::select('id', 'name', 'stock')->get(),
-                'product_recipes' => ProductRecipe::select('id', 'name', 'stock')->get(),
-                'materials' => Material::select('id', 'name', 'stock')->get(),
-            ],
+            'data' => $this->getSelectOptionsData($request),
         ]);
     }
 
@@ -66,25 +65,29 @@ class ManufactringController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $lists = ManufacturingList::with([
+        $query = ManufacturingList::with([
+            'branch',
             'product',
             'productRecipe',
             'manufacturingRecipes.material',
             'manufacturingRecipes.productRecipe',
-        ])->latest()->paginate($request->get('per_page', 15));
+        ])->latest();
+
+        if ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
+
+        $lists = $query->paginate($request->get('per_page', 15));
 
         return ManufacturingListResource::collection($lists)->additional([
-            'select_options' => [
-                'products' => Product::select('id', 'name')->get(),
-                'product_recipes' => ProductRecipe::select('id', 'name')->get(),
-                'materials' => Material::select('id', 'name')->get(),
-            ],
+            'select_options' => $this->getSelectOptionsData($request),
         ]);
     }
 
     public function manufacture(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'branch_id' => 'required|integer|exists:branches,id',
             'product_id' => 'nullable|exists:products,id|required_without:product_recipe_id',
             'product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:product_id',
             'count' => 'required|integer|min:1',
@@ -94,56 +97,77 @@ class ManufactringController extends Controller
             'recipes.*.count' => 'required|integer|min:1',
         ]);
 
-        // 1. Stock availability validation
-        $materialModels = [];
-        $recipeModels = [];
+        $branchId = (int) $validated['branch_id'];
+
+        // 1. Stock availability validation in the designated branch
+        $materialStocks = [];
+        $recipeStocks = [];
 
         foreach ($validated['recipes'] as $item) {
             if (! empty($item['material_id'])) {
-                $material = Material::lockForUpdate()->find($item['material_id']);
-                if (! $material || $material->stock < $item['count']) {
-                    $name = is_array($material?->name) ? ($material->name['en'] ?? $material->name['ar'] ?? $item['material_id']) : ($material?->name ?? $item['material_id']);
+                $matStock = MaterialStock::where('material_id', $item['material_id'])
+                    ->where('branch_id', $branchId)
+                    ->lockForUpdate()
+                    ->first();
+
+                $availableStock = (float) ($matStock?->stock ?? 0);
+                if ($availableStock < $item['count']) {
+                    $material = Material::find($item['material_id']);
+                    $name = is_array($material?->name)
+                        ? ($material->name['en'] ?? $material->name['ar'] ?? $item['material_id'])
+                        : ($material?->name ?? $item['material_id']);
 
                     return response()->json([
                         'status' => false,
-                        'message' => "Insufficient stock for material '{$name}'. Available: ".($material?->stock ?? 0).", Required: {$item['count']}.",
+                        'message' => "Insufficient stock in this branch for material '{$name}'. Available: {$availableStock}, Required: {$item['count']}.",
                     ], 422);
                 }
-                $materialModels[] = ['model' => $material, 'count' => $item['count']];
+                $materialStocks[] = ['stockModel' => $matStock, 'count' => $item['count']];
             } elseif (! empty($item['product_recipe_id'])) {
-                $productRecipe = ProductRecipe::lockForUpdate()->find($item['product_recipe_id']);
-                if (! $productRecipe || $productRecipe->stock < $item['count']) {
-                    $name = is_array($productRecipe?->name) ? ($productRecipe->name['en'] ?? $productRecipe->name['ar'] ?? $item['product_recipe_id']) : ($productRecipe?->name ?? $item['product_recipe_id']);
+                $recStock = ProductRecipeStock::where('product_recipe_id', $item['product_recipe_id'])
+                    ->where('branch_id', $branchId)
+                    ->lockForUpdate()
+                    ->first();
+
+                $availableStock = (float) ($recStock?->stock ?? 0);
+                if ($availableStock < $item['count']) {
+                    $recipe = ProductRecipe::find($item['product_recipe_id']);
+                    $name = is_array($recipe?->name)
+                        ? ($recipe->name['en'] ?? $recipe->name['ar'] ?? $item['product_recipe_id'])
+                        : ($recipe?->name ?? $item['product_recipe_id']);
 
                     return response()->json([
                         'status' => false,
-                        'message' => "Insufficient stock for product recipe '{$name}'. Available: ".($productRecipe?->stock ?? 0).", Required: {$item['count']}.",
+                        'message' => "Insufficient stock in this branch for product recipe '{$name}'. Available: {$availableStock}, Required: {$item['count']}.",
                     ], 422);
                 }
-                $recipeModels[] = ['model' => $productRecipe, 'count' => $item['count']];
+                $recipeStocks[] = ['stockModel' => $recStock, 'count' => $item['count']];
             }
         }
 
         // 2. Perform manufacturing execution in DB transaction
-        $manufacturingList = DB::transaction(function () use ($validated, $materialModels, $recipeModels) {
-            // Deduct ingredients stock
-            foreach ($materialModels as $matItem) {
-                $matItem['model']->decrement('stock', $matItem['count']);
+        $manufacturingList = DB::transaction(function () use ($validated, $branchId, $materialStocks, $recipeStocks) {
+            // Deduct ingredients stock from the designated branch
+            foreach ($materialStocks as $matItem) {
+                $matItem['stockModel']->decrement('stock', $matItem['count']);
             }
 
-            foreach ($recipeModels as $recItem) {
-                $recItem['model']->decrement('stock', $recItem['count']);
+            foreach ($recipeStocks as $recItem) {
+                $recItem['stockModel']->decrement('stock', $recItem['count']);
             }
 
-            // Increment manufactured item stock
-            if (! empty($validated['product_id'])) {
-                Product::where('id', $validated['product_id'])->increment('stock', $validated['count']);
-            } elseif (! empty($validated['product_recipe_id'])) {
-                ProductRecipe::where('id', $validated['product_recipe_id'])->increment('stock', $validated['count']);
+            // Increment manufactured item stock (only product recipes track stock by branch; products are on-demand)
+            if (! empty($validated['product_recipe_id'])) {
+                $targetStock = ProductRecipeStock::firstOrCreate(
+                    ['product_recipe_id' => $validated['product_recipe_id'], 'branch_id' => $branchId],
+                    ['stock' => 0]
+                );
+                $targetStock->increment('stock', $validated['count']);
             }
 
             // Create ManufacturingList
             $mList = ManufacturingList::create([
+                'branch_id' => $branchId,
                 'product_id' => $validated['product_id'] ?? null,
                 'product_recipe_id' => $validated['product_recipe_id'] ?? null,
                 'count' => $validated['count'],
@@ -162,6 +186,7 @@ class ManufactringController extends Controller
         });
 
         $manufacturingList->load([
+            'branch',
             'product',
             'productRecipe',
             'manufacturingRecipes.material',
@@ -178,6 +203,7 @@ class ManufactringController extends Controller
     public function show(ManufacturingList $manufacturingList): JsonResponse
     {
         $manufacturingList->load([
+            'branch',
             'product',
             'productRecipe',
             'manufacturingRecipes.material',
@@ -188,5 +214,29 @@ class ManufactringController extends Controller
             'status' => true,
             'data' => new ManufacturingListResource($manufacturingList),
         ]);
+    }
+
+    private function getSelectOptionsData(?Request $request = null): array
+    {
+        $branchId = $request?->query('branch_id');
+
+        return [
+            'branches' => Branch::select('id', 'name')->get(),
+            'products' => Product::select('id', 'name')->get(),
+            'product_recipes' => ProductRecipe::select('id', 'name')->get()->map(function ($item) use ($branchId) {
+                return [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'stock' => $branchId ? (float) $item->stockForBranch((int) $branchId) : (float) $item->totalStock(),
+                ];
+            }),
+            'materials' => Material::select('id', 'name')->get()->map(function ($item) use ($branchId) {
+                return [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'stock' => $branchId ? (float) $item->stockForBranch((int) $branchId) : (float) $item->totalStock(),
+                ];
+            }),
+        ];
     }
 }

@@ -16,6 +16,8 @@ class WasteResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'branch_id' => $this->branch_id,
+            'branch' => new BranchResource($this->whenLoaded('branch')),
             'product_recipe_id' => $this->product_recipe_id,
             'product_recipe' => new ProductRecipeResource($this->whenLoaded('productRecipe')),
             'material_id' => $this->material_id,

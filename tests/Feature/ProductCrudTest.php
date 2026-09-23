@@ -135,7 +135,6 @@ test('admin can perform full CRUD on Product with nested variations and options'
             'en' => 'Premium beef burger with double cheddar cheese',
         ],
         'price' => 150.00,
-        'stock' => 50,
         'tax_id' => $tax->id,
         'discount_id' => $discount->id,
         'category_id' => $parentCategory->id,
@@ -182,7 +181,6 @@ test('admin can perform full CRUD on Product with nested variations and options'
         ->assertJsonPath('data.name.ar', 'برجر دبل تشيز')
         ->assertJsonPath('data.name.en', 'Double Cheese Burger')
         ->assertJsonPath('data.price', 150)
-        ->assertJsonPath('data.stock', 50)
         ->assertJsonPath('data.tax_id', $tax->id)
         ->assertJsonPath('data.discount_id', $discount->id)
         ->assertJsonPath('data.category_id', $parentCategory->id)
@@ -196,7 +194,6 @@ test('admin can perform full CRUD on Product with nested variations and options'
                 'description',
                 'image',
                 'price',
-                'stock',
                 'tax_id',
                 'tax',
                 'discount_id',
@@ -231,7 +228,6 @@ test('admin can perform full CRUD on Product with nested variations and options'
     $this->assertDatabaseHas('products', [
         'id' => $productId,
         'sub_category_id' => $subCategory->id,
-        'stock' => 50,
     ]);
 
     expect(Variation::where('product_id', $productId)->count())->toBe(2);
@@ -269,7 +265,6 @@ test('admin can perform full CRUD on Product with nested variations and options'
                 'en' => 'Triple Cheese Burger Updated',
             ],
             'price' => 199.99,
-            'stock' => 75,
             'sub_category_id' => $newSubCategory->id,
             'image' => $newImage,
             'variations' => [
@@ -293,7 +288,6 @@ test('admin can perform full CRUD on Product with nested variations and options'
         ->assertJsonPath('data.name.ar', 'برجر تربل تشيز معدل')
         ->assertJsonPath('data.name.en', 'Triple Cheese Burger Updated')
         ->assertJsonPath('data.price', 199.99)
-        ->assertJsonPath('data.stock', 75)
         ->assertJsonPath('data.sub_category_id', $newSubCategory->id)
         ->assertJsonPath('data.sub_category.id', $newSubCategory->id);
 
@@ -301,7 +295,6 @@ test('admin can perform full CRUD on Product with nested variations and options'
     $this->assertDatabaseHas('products', [
         'id' => $productId,
         'sub_category_id' => $newSubCategory->id,
-        'stock' => 75,
     ]);
 
     expect(Variation::where('product_id', $productId)->count())->toBe(1);
@@ -327,7 +320,6 @@ test('admin can create product with string name and string variations/options', 
             'description' => 'Delicious shawarma plate',
             'price' => 85.50,
             'image' => 'uploads/products/shawarma.jpg',
-            'stock' => 20,
             'variations' => [
                 [
                     'name' => 'Spiciness',
@@ -359,7 +351,6 @@ test('admin can list products with pagination and select_options', function () {
         'name' => ['ar' => 'منتج تجريبي', 'en' => 'Test Product'],
         'price' => 50,
         'image' => 'uploads/products/test.jpg',
-        'stock' => 10,
     ]);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
@@ -373,7 +364,6 @@ test('admin can list products with pagination and select_options', function () {
                     'name',
                     'price',
                     'image',
-                    'stock',
                     'category',
                     'sub_category',
                     'variations',

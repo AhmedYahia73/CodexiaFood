@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Purchase extends Model
@@ -12,6 +13,7 @@ class Purchase extends Model
     use HasFactory;
 
     protected $fillable = [
+        'branch_id',
         'material_ids',
         'product_recipe_id',
         'quantity',
@@ -25,6 +27,7 @@ class Purchase extends Model
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
             'material_ids' => 'array',
             'product_recipe_id' => 'array',
             'quantity' => 'decimal:2',
@@ -32,6 +35,11 @@ class Purchase extends Model
             'total_cost' => 'decimal:2',
             'total_quantity' => 'decimal:2',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     /**

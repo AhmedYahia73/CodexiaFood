@@ -20,6 +20,8 @@ class PurchaseResource extends JsonResource
 
         return [
             'id' => $this->id,
+            'branch_id' => $this->branch_id,
+            'branch' => new BranchResource($this->whenLoaded('branch')),
             'receipt' => $this->receipt,
             'receipt_url' => $this->receipt_url,
             'total_cost' => $totalCost,

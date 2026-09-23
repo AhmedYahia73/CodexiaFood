@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\Admin;
+use App\Models\Branch;
 use App\Models\Category;
 use App\Models\ProductRecipe;
+use App\Models\ProductRecipeStock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Tests\TestCase;
@@ -18,7 +20,7 @@ beforeEach(function () {
     $this->token = JWTAuth::fromUser($this->admin);
 });
 
-test('unauthenticated request to product-recipe endpoints returns 401', function () {
+test('unauthenticated request to product-recipes endpoints returns 401', function () {
     $this->getJson('/api/admin/product-recipes')->assertStatus(401);
     $this->getJson('/api/admin/product-recipes/select-options')->assertStatus(401);
     $this->postJson('/api/admin/product-recipes', [])->assertStatus(401);
@@ -33,8 +35,8 @@ test('admin can fetch select-options returning categories with id, name, and typ
     ]);
 
     $productCategory = Category::create([
-        'name' => ['ar' => 'وجبات رئيسية', 'en' => 'Main Meals'],
-        'image' => 'categories/meals.jpg',
+        'name' => ['ar' => 'بيتزا', 'en' => 'Pizza'],
+        'image' => 'categories/pizza.jpg',
         'type' => 'product',
         'status' => true,
     ]);
@@ -80,7 +82,6 @@ test('admin can perform full CRUD on ProductRecipe model with multilingual name'
                 'en' => 'Smoked BBQ Sauce',
             ],
             'status' => true,
-            'stock' => 50,
             'category_id' => $category->id,
         ]);
 
@@ -89,7 +90,6 @@ test('admin can perform full CRUD on ProductRecipe model with multilingual name'
         ->assertJsonPath('data.name.ar', 'صوص الباربيكيو المدخن')
         ->assertJsonPath('data.name.en', 'Smoked BBQ Sauce')
         ->assertJsonPath('data.status', true)
-        ->assertJsonPath('data.stock', 50)
         ->assertJsonPath('data.category_id', $category->id)
         ->assertJsonPath('data.category.id', $category->id)
         ->assertJsonStructure([
@@ -99,7 +99,6 @@ test('admin can perform full CRUD on ProductRecipe model with multilingual name'
                 'id',
                 'name',
                 'status',
-                'stock',
                 'category_id',
                 'category',
                 'created_at',
@@ -113,7 +112,6 @@ test('admin can perform full CRUD on ProductRecipe model with multilingual name'
 
     $this->assertDatabaseHas('product_recipes', [
         'id' => $recipeId,
-        'stock' => 50,
         'status' => true,
         'category_id' => $category->id,
     ]);
@@ -136,7 +134,6 @@ test('admin can perform full CRUD on ProductRecipe model with multilingual name'
                 'ar' => 'صوص الباربيكيو الحار',
                 'en' => 'Spicy BBQ Sauce',
             ],
-            'stock' => 80,
             'status' => false,
         ]);
 
@@ -144,12 +141,10 @@ test('admin can perform full CRUD on ProductRecipe model with multilingual name'
         ->assertJsonPath('status', true)
         ->assertJsonPath('data.name.ar', 'صوص الباربيكيو الحار')
         ->assertJsonPath('data.name.en', 'Spicy BBQ Sauce')
-        ->assertJsonPath('data.stock', 80)
         ->assertJsonPath('data.status', false);
 
     $this->assertDatabaseHas('product_recipes', [
         'id' => $recipeId,
-        'stock' => 80,
         'status' => false,
     ]);
 
@@ -165,28 +160,25 @@ test('admin can perform full CRUD on ProductRecipe model with multilingual name'
 
 test('admin can create ProductRecipe using simple string name', function () {
     $category = Category::create([
-        'name' => ['ar' => 'خلطات التتبيل', 'en' => 'Marinade Mixes'],
-        'image' => 'categories/marinades.jpg',
+        'name' => ['ar' => 'وصفات المخبوزات', 'en' => 'Bakery Recipes'],
+        'image' => 'categories/bakery.jpg',
         'type' => 'recipe',
     ]);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/product-recipes', [
-            'name' => 'Garlic Herb Butter',
-            'stock' => 25,
+            'name' => 'Garlic Bread Paste',
             'category_id' => $category->id,
         ]);
 
     $response->assertStatus(201)
-        ->assertJsonPath('data.name.en', 'Garlic Herb Butter')
-        ->assertJsonPath('data.name.ar', 'Garlic Herb Butter')
-        ->assertJsonPath('data.stock', 25);
+        ->assertJsonPath('data.name.en', 'Garlic Bread Paste')
+        ->assertJsonPath('data.name.ar', 'Garlic Bread Paste');
 });
 
 test('admin can list product recipes with pagination and select_options', function () {
     ProductRecipe::create([
-        'name' => ['ar' => 'وصفة تجريبية', 'en' => 'Test Recipe'],
-        'stock' => 15,
+        'name' => ['ar' => 'صلصة بيتزا كلاسيك', 'en' => 'Classic Pizza Sauce'],
         'status' => true,
     ]);
 
@@ -200,7 +192,6 @@ test('admin can list product recipes with pagination and select_options', functi
                     'id',
                     'name',
                     'status',
-                    'stock',
                     'category_id',
                     'category',
                 ],
@@ -209,4 +200,28 @@ test('admin can list product recipes with pagination and select_options', functi
             'meta',
             'select_options' => ['categories'],
         ]);
+});
+
+test('admin can view branch stock for product recipe when branch_id is supplied', function () {
+    $branch = Branch::create([
+        'name' => ['ar' => 'فرع مدينة نصر', 'en' => 'Nasr City Branch'],
+    ]);
+
+    $recipe = ProductRecipe::create([
+        'name' => ['ar' => 'صلصة حارة', 'en' => 'Hot Sauce'],
+        'status' => true,
+    ]);
+
+    ProductRecipeStock::create([
+        'product_recipe_id' => $recipe->id,
+        'branch_id' => $branch->id,
+        'stock' => 42.5,
+    ]);
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson("/api/admin/product-recipes/{$recipe->id}?branch_id={$branch->id}");
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.stock', 42.5)
+        ->assertJsonPath('data.total_stock', 42.5);
 });

@@ -14,19 +14,22 @@ class ManufacturingListResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $branchId = $this->branch_id;
+
         return [
             'id' => $this->id,
+            'branch_id' => $this->branch_id,
+            'branch' => new BranchResource($this->whenLoaded('branch')),
             'product_id' => $this->product_id,
             'product' => $this->relationLoaded('product') && $this->product ? [
                 'id' => $this->product->id,
                 'name' => $this->product->name,
-                'stock' => $this->product->stock,
             ] : null,
             'product_recipe_id' => $this->product_recipe_id,
             'product_recipe' => $this->relationLoaded('productRecipe') && $this->productRecipe ? [
                 'id' => $this->productRecipe->id,
                 'name' => $this->productRecipe->name,
-                'stock' => $this->productRecipe->stock,
+                'stock' => $branchId ? $this->productRecipe->stockForBranch((int) $branchId) : $this->productRecipe->totalStock(),
             ] : null,
             'count' => (int) $this->count,
             'recipes' => ManufacturingRecipeResource::collection($this->whenLoaded('manufacturingRecipes')),

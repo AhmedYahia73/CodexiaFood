@@ -29,7 +29,6 @@ class ProductResource extends JsonResource
             'description' => $this->description,
             'image' => $imageUrl,
             'price' => (float) $this->price,
-            'stock' => (int) $this->stock,
             'tax_id' => $this->tax_id,
             'tax' => new TaxResource($this->whenLoaded('tax')),
             'discount_id' => $this->discount_id,

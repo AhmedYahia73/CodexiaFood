@@ -49,14 +49,12 @@ class ProductRecipeController extends Controller
             'name.en' => 'required|string|max:255',
             'name.ar' => 'required|string|max:255',
             'status' => 'nullable|boolean',
-            'stock' => 'nullable|integer|min:0',
             'category_id' => 'nullable|exists:categories,id',
         ]);
 
         $productRecipe = ProductRecipe::create([
             'name' => $validated['name'],
             'status' => $validated['status'] ?? true,
-            'stock' => $validated['stock'] ?? 0,
             'category_id' => $validated['category_id'] ?? null,
         ]);
 
@@ -92,7 +90,6 @@ class ProductRecipeController extends Controller
             'name.en' => 'required_with:name|string|max:255',
             'name.ar' => 'required_with:name|string|max:255',
             'status' => 'nullable|boolean',
-            'stock' => 'nullable|integer|min:0',
             'category_id' => 'nullable|exists:categories,id',
         ]);
 
@@ -103,9 +100,6 @@ class ProductRecipeController extends Controller
         }
         if ($request->has('status')) {
             $dataToUpdate['status'] = $validated['status'] ?? true;
-        }
-        if ($request->has('stock')) {
-            $dataToUpdate['stock'] = $validated['stock'] ?? 0;
         }
         if ($request->has('category_id')) {
             $dataToUpdate['category_id'] = $validated['category_id'] ?? null;

@@ -48,14 +48,12 @@ class MaterialController extends Controller
             'name' => 'required|array:en,ar',
             'name.en' => 'required|string|max:255',
             'name.ar' => 'required|string|max:255',
-            'stock' => 'nullable|integer|min:0',
             'status' => 'nullable|boolean',
             'category_id' => 'nullable|exists:categories,id',
         ]);
 
         $material = Material::create([
             'name' => $validated['name'],
-            'stock' => $validated['stock'] ?? 0,
             'status' => $validated['status'] ?? true,
             'category_id' => $validated['category_id'] ?? null,
         ]);
@@ -91,7 +89,6 @@ class MaterialController extends Controller
             'name' => 'sometimes|required|array:en,ar',
             'name.en' => 'required_with:name|string|max:255',
             'name.ar' => 'required_with:name|string|max:255',
-            'stock' => 'nullable|integer|min:0',
             'status' => 'nullable|boolean',
             'category_id' => 'nullable|exists:categories,id',
         ]);
@@ -100,9 +97,6 @@ class MaterialController extends Controller
 
         if (isset($validated['name'])) {
             $dataToUpdate['name'] = $validated['name'];
-        }
-        if ($request->has('stock')) {
-            $dataToUpdate['stock'] = $validated['stock'] ?? 0;
         }
         if ($request->has('status')) {
             $dataToUpdate['status'] = $validated['status'] ?? true;
