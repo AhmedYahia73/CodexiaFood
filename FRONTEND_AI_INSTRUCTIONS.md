@@ -206,15 +206,49 @@ export interface ExecuteManufacturingPayload {
 
 ## 3. Screen-by-Screen Implementation Guide
 
-### A. Products (Forms, Tables, POS, Cashier)
-1. **Forms (`ProductForm`, `CreateProduct`, `EditProduct`)**:
+### A. Products & POS / Cashier Order System
+1. **Product Forms (`ProductForm`, `CreateProduct`, `EditProduct`)**:
    - Locate and delete the `stock` input field from the UI template / JSX.
    - Remove `stock` from form validation schemas (Zod, Yup, VeeValidate).
    - Remove `stock` from form state / initial values.
-2. **POS / Cashier / Table Ordering**:
-   - Products are made on-demand. Remove any client-side condition like `product.stock <= 0` that disables product selection or displays "Out of Stock" badges. Products are active and orderable whenever `product.status === true`.
 
-### B. Materials & Recipes (Forms & Tables)
+2. **Cashier Cart: Adding Items (`POST /api/cashier/cart`)**:
+   - The backend checks whether the cashier's branch has sufficient stock of the recipe ingredients (Materials & Recipes defined in `ProductManufacturing`).
+   - If stock is insufficient, the backend returns status **422**:
+     ```json
+     {
+       "status": false,
+       "message": "المخزون المتوفر للمادة الخام (لحم مفروم) في هذا الفرع غير كافٍ. المتاح: 1، المطلوب: 2.",
+       "insufficient_ingredient": {
+         "type": "material",
+         "id": 1,
+         "name": "لحم مفروم",
+         "available_stock": 1,
+         "required_quantity": 2,
+         "can_bypass": true
+       }
+     }
+     ```
+   - **Bypass Option (`without_recipe: true`)**:
+     - When receiving 422, the frontend can show a confirmation dialog: *"المخزون غير كافٍ للمكونات. هل تريد إضافة المنتج بدون فحص الوصفة؟"*
+     - If the cashier agrees, re-submit with `without_recipe: true`:
+       ```typescript
+       await api.post('/api/cashier/cart', {
+         module: 'takeaway',
+         product_id: productId,
+         quantity: qty,
+         without_recipe: true, // Bypasses ingredient stock check
+         variations: [...],
+         addons: [...]
+       });
+       ```
+     - *Note: Adding to cart only checks stock availability; it does NOT deduct from stock.*
+
+3. **Cashier Order Checkout (`POST /api/cashier/orders/checkout`)**:
+   - When the order is checked out, the backend automatically resolves the cashier's branch (`cashier.branch_id`) and deducts the ingredients consumed by the ordered products.
+   - **Safe Stock Guard**: Stock will **never** drop below 0. If branch stock is 9 and required is 10, it deducts 9 and leaves stock at 0.
+
+---
 1. **Forms (`MaterialForm`, `ProductRecipeForm`)**:
    - Locate and delete the `stock` input field from Create and Edit forms.
    - Initial stock is never set during creation; it is accumulated via Purchases and Manufacturing.

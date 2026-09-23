@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\api\cashier;
 
 use App\Http\Controllers\Controller;
+use App\Models\Cashier;
+use App\Models\MaterialStock;
 use App\Models\OrderAddonCart;
 use App\Models\OrderCart;
 use App\Models\OrderVariationCart;
+use App\Models\ProductManufacturing;
+use App\Models\ProductRecipeStock;
 use App\Services\PriceCalculatorService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -103,6 +107,7 @@ class CashierCartController extends Controller
             'module' => 'required|in:takeaway,dinein,delivery',
             'product_id' => 'required|exists:products,id',
             'quantity' => 'nullable|integer|min:1',
+            'without_recipe' => 'sometimes|nullable|boolean',
             'notes' => 'nullable|string',
             'variations' => 'nullable|array',
             'variations.*.variation_id' => 'required_with:variations|exists:variations,id',
@@ -112,15 +117,91 @@ class CashierCartController extends Controller
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
         ]);
 
+        $cashier = Cashier::find($cashierId);
+        $branchId = $cashier?->branch_id ?? auth()->user()?->branch_id;
+
+        // Check stock of recipe ingredients unless without_recipe is true
+        $withoutRecipe = $request->boolean('without_recipe');
+        if (! $withoutRecipe && $branchId) {
+            $spec = ProductManufacturing::with([
+                'productRecipeManufacturings.material',
+                'productRecipeManufacturings.productRecipe',
+            ])
+                ->where('product_id', $validated['product_id'])
+                ->latest('id')
+                ->first();
+
+            if ($spec && $spec->productRecipeManufacturings->isNotEmpty()) {
+                $requestedQty = max(1, (int) ($validated['quantity'] ?? 1));
+
+                foreach ($spec->productRecipeManufacturings as $recipeItem) {
+                    $requiredQty = (float) $recipeItem->count * $requestedQty;
+                    if ($requiredQty <= 0) {
+                        continue;
+                    }
+
+                    if (! empty($recipeItem->material_id)) {
+                        $currentStock = (float) (MaterialStock::where('material_id', $recipeItem->material_id)
+                            ->where('branch_id', $branchId)
+                            ->value('stock') ?? 0);
+
+                        if ($currentStock < $requiredQty) {
+                            $matName = $recipeItem->material?->name;
+                            $name = is_array($matName)
+                                ? ($matName['ar'] ?? $matName['en'] ?? "مادة خام #{$recipeItem->material_id}")
+                                : ($matName ?? "مادة خام #{$recipeItem->material_id}");
+
+                            return response()->json([
+                                'status' => false,
+                                'message' => "المخزون المتوفر للمادة الخام ({$name}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQty}.",
+                                'insufficient_ingredient' => [
+                                    'type' => 'material',
+                                    'id' => $recipeItem->material_id,
+                                    'name' => $name,
+                                    'available_stock' => $currentStock,
+                                    'required_quantity' => $requiredQty,
+                                    'can_bypass' => true,
+                                ],
+                            ], 422);
+                        }
+                    } elseif (! empty($recipeItem->product_recipe_id)) {
+                        $currentStock = (float) (ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
+                            ->where('branch_id', $branchId)
+                            ->value('stock') ?? 0);
+
+                        if ($currentStock < $requiredQty) {
+                            $recName = $recipeItem->productRecipe?->name;
+                            $name = is_array($recName)
+                                ? ($recName['ar'] ?? $recName['en'] ?? "وصفة #{$recipeItem->product_recipe_id}")
+                                : ($recName ?? "وصفة #{$recipeItem->product_recipe_id}");
+
+                            return response()->json([
+                                'status' => false,
+                                'message' => "المخزون المتوفر للوصفة ({$name}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQty}.",
+                                'insufficient_ingredient' => [
+                                    'type' => 'product_recipe',
+                                    'id' => $recipeItem->product_recipe_id,
+                                    'name' => $name,
+                                    'available_stock' => $currentStock,
+                                    'required_quantity' => $requiredQty,
+                                    'can_bypass' => true,
+                                ],
+                            ], 422);
+                        }
+                    }
+                }
+            }
+        }
+
         $locale = $this->getLocale($request);
 
-        $cart = DB::transaction(function () use ($validated, $cashierId): OrderCart {
+        $cart = DB::transaction(function () use ($validated, $cashierId, $branchId): OrderCart {
             $cart = OrderCart::create([
                 'module' => $validated['module'],
                 'product_id' => $validated['product_id'],
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
-                'branch_id' => auth()->user()?->branch_id,
+                'branch_id' => $branchId,
                 'quantity' => $validated['quantity'] ?? 1,
                 'notes' => $validated['notes'] ?? null,
             ]);

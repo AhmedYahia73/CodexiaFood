@@ -4,12 +4,16 @@ namespace App\Http\Controllers\api\cashier;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
+use App\Models\Cashier;
+use App\Models\MaterialStock;
 use App\Models\Order;
 use App\Models\OrderCart;
 use App\Models\OrderPAddon;
 use App\Models\OrderPOption;
 use App\Models\OrderProduct;
 use App\Models\OrderPVariation;
+use App\Models\ProductManufacturing;
+use App\Models\ProductRecipeStock;
 use App\Models\StartShift;
 use App\Services\PriceCalculatorService;
 use Illuminate\Http\JsonResponse;
@@ -232,7 +236,10 @@ class CashierOrderController extends Controller
             ->latest('start')
             ->value('id');
 
-        $order = DB::transaction(function () use ($validated, $carts, $grandTotals, $cashierId, $openShiftId): Order {
+        $cashier = Cashier::find($cashierId);
+        $branchId = $cashier?->branch_id ?? auth()->user()?->branch_id;
+
+        $order = DB::transaction(function () use ($validated, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
             $order = Order::create([
                 'shift_id' => $openShiftId,
                 'cashier_id' => $cashierId,
@@ -284,6 +291,56 @@ class CashierOrderController extends Controller
                             'addon_id' => $addonCart->addon_id,
                             'price' => (float) $addonCart->addon->price,
                         ]);
+                    }
+                }
+
+                // Deduct from branch stock for product ingredients based on ProductManufacturing
+                if ($branchId) {
+                    $spec = ProductManufacturing::with([
+                        'productRecipeManufacturings.material',
+                        'productRecipeManufacturings.productRecipe',
+                    ])
+                        ->where('product_id', $cart->product_id)
+                        ->latest('id')
+                        ->first();
+
+                    if ($spec) {
+                        foreach ($spec->productRecipeManufacturings as $recipeItem) {
+                            $requiredQty = (float) $recipeItem->count * $qty;
+                            if ($requiredQty <= 0) {
+                                continue;
+                            }
+
+                            if (! empty($recipeItem->material_id)) {
+                                $matStock = MaterialStock::where('material_id', $recipeItem->material_id)
+                                    ->where('branch_id', $branchId)
+                                    ->lockForUpdate()
+                                    ->first();
+
+                                if ($matStock) {
+                                    $current = (float) $matStock->stock;
+                                    // Stock must not drop below 0: if stock is 9 and recipe needs 10, deduct only 9
+                                    $deduct = min(max(0.0, $current), $requiredQty);
+                                    if ($deduct > 0) {
+                                        $matStock->decrement('stock', $deduct);
+                                    }
+                                }
+                            } elseif (! empty($recipeItem->product_recipe_id)) {
+                                $recStock = ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
+                                    ->where('branch_id', $branchId)
+                                    ->lockForUpdate()
+                                    ->first();
+
+                                if ($recStock) {
+                                    $current = (float) $recStock->stock;
+                                    // Stock must not drop below 0: if stock is 9 and recipe needs 10, deduct only 9
+                                    $deduct = min(max(0.0, $current), $requiredQty);
+                                    if ($deduct > 0) {
+                                        $recStock->decrement('stock', $deduct);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
