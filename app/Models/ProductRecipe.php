@@ -69,4 +69,9 @@ class ProductRecipe extends Model
     {
         return $this->hasMany(Waste::class);
     }
+
+    public function inventoryProductRecipes(): HasMany
+    {
+        return $this->hasMany(InventoryProductRecipe::class);
+    }
 }

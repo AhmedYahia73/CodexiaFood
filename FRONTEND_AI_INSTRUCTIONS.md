@@ -26,6 +26,8 @@
 | **Manufacturing** (`/manufacturing`) | `GET /api/admin/manufacturing/select-options` | `{ branches, products, product_recipes, materials }` | Only requires Manufacturing permissions |
 | **Materials** (`/materials`) | `GET /api/admin/materials/select-options` | `{ branches, categories }` | Used for branch filter dropdown in materials |
 | **Product Recipes** (`/product-recipes`) | `GET /api/admin/product-recipes/select-options` | `{ branches, categories }` | Used for branch filter dropdown in recipes |
+| **Recipe Inventory** (`/inventory/recipes`) | `GET /api/admin/inventory/recipes/select-options` | `{ branches }` | Used for branch selection in recipe inventory |
+| **Material Inventory** (`/inventory/materials`) | `GET /api/admin/inventory/materials/select-options` | `{ branches }` | Used for branch selection in material inventory |
 | **Branch Management Only** (`/branches`) | `GET /api/admin/branches/select-options` | `{ branches }` | Requires Branch Admin permissions |
 
 *Note: All `branches` lists returned in these endpoints share the exact same format:*
@@ -200,6 +202,57 @@ export interface ExecuteManufacturingPayload {
   count: number;
   recipes: ManufacturingRecipeItemPayload[];
 }
+
+// ==================== INVENTORY (الجرد) ====================
+export type InventoryStatus = 'pending' | 'approve' | 'reject';
+
+export interface CreateInventoryPayload {
+  name: string;
+  branch_id: number;
+}
+
+export interface InventoryListItem {
+  id: number;
+  name: string;
+  branch_id: number;
+  branch_name?: { en: string; ar: string } | string;
+  status: InventoryStatus;
+  created_at: string; // Formatted date e.g. "2026-09-24"
+  date: string;       // Formatted date e.g. "2026-09-24"
+  created_at_full?: string;
+  updated_at?: string;
+}
+
+export interface InventoryRecipeItem {
+  id: number;
+  inventory_id: number;
+  product_recipe_id: number;
+  product_recipe_name?: { en: string; ar: string } | string;
+  stock: number;        // Snapshot of stock at inventory creation
+  actual_stock: number; // Physical count entered by staff
+  difference: number;   // actual_stock - stock
+}
+
+export interface InventoryMaterialItem {
+  id: number;
+  inventory_id: number;
+  material_id: number;
+  material_name?: { en: string; ar: string } | string;
+  stock: number;        // Snapshot of stock at inventory creation
+  actual_stock: number; // Physical count entered by staff
+  difference: number;   // actual_stock - stock
+}
+
+export interface InventoryDetail {
+  id: number;
+  name: string;
+  branch_id: number;
+  branch_name?: { en: string; ar: string } | string;
+  status: InventoryStatus;
+  created_at: string;
+  date: string;
+  items: (InventoryRecipeItem | InventoryMaterialItem)[];
+}
 ```
 
 ---
@@ -363,6 +416,84 @@ export interface ExecuteManufacturingPayload {
 
 ---
 
+### F. Inventory & Stocktaking Screens (الجرد)
+
+The system supports two independent stocktaking workflows: **Product Recipe Inventory** and **Material Inventory**.
+
+#### 1. Recipe Inventory (`/inventory/recipes`)
+- **Get Branch Options**:
+  ```typescript
+  const res = await api.get('/api/admin/inventory/recipes/select-options');
+  const branches = res.data.data.branches; // [{id, name}, ...]
+  ```
+- **Create New Inventory**:
+  ```typescript
+  // When user clicks "Start Inventory", send name & branch_id
+  // Backend automatically creates a snapshot with all recipes and current branch stock (or 0)
+  const res = await api.post('/api/admin/inventory/recipes', {
+    name: 'جرد وصفات نهاية الأسبوع',
+    branch_id: selectedBranchId,
+  });
+  const createdInventory = res.data.data; // includes initial items list with stock & actual_stock
+  ```
+- **List Pending Inventories**:
+  ```typescript
+  // Displays inventories waiting for physical count / approval
+  const res = await api.get('/api/admin/inventory/recipes/pending');
+  // Returns: [{ id, name, branch_id, branch_name, status: "pending", created_at, date }, ...]
+  ```
+- **List History / Completed Inventories**:
+  ```typescript
+  // Displays past approved or rejected inventories
+  const res = await api.get('/api/admin/inventory/recipes/history');
+  // Returns: [{ id, name, branch_id, branch_name, status: "approve" | "reject", created_at, date }, ...]
+  ```
+- **View Inventory Details & Count Items**:
+  ```typescript
+  const res = await api.get(`/api/admin/inventory/recipes/${inventoryId}`);
+  // data: { id, name, branch_name, status, items: [ { id, product_recipe_id, product_recipe_name, stock, actual_stock, difference } ] }
+  ```
+- **Update Actual Stock for an Item**:
+  ```typescript
+  // Option A: Update single item
+  await api.put(`/api/admin/inventory/recipe-items/${itemId}`, {
+    actual_stock: 12.5,
+  });
+
+  // Option B: Batch save entire count sheet
+  await api.put(`/api/admin/inventory/recipes/${inventoryId}/items`, {
+    items: [
+      { id: 1, actual_stock: 12.5 },
+      { id: 2, actual_stock: 5.0 },
+    ],
+  });
+  ```
+- **Change Status (Approve / Reject)**:
+  ```typescript
+  // APPROVE: Overwrites branch ProductRecipeStock with actual_stock for each item
+  await api.put(`/api/admin/inventory/recipes/${inventoryId}/status`, {
+    status: 'approve',
+  });
+
+  // REJECT: Closes inventory without altering stock
+  await api.put(`/api/admin/inventory/recipes/${inventoryId}/status`, {
+    status: 'reject',
+  });
+  ```
+
+#### 2. Material Inventory (`/inventory/materials`)
+Follows the exact same lifecycle and schema as Recipe Inventory, using dedicated material endpoints:
+- **Select Options**: `GET /api/admin/inventory/materials/select-options`
+- **Create**: `POST /api/admin/inventory/materials` (`{ name, branch_id }`)
+- **Pending**: `GET /api/admin/inventory/materials/pending`
+- **History**: `GET /api/admin/inventory/materials/history`
+- **Show**: `GET /api/admin/inventory/materials/${inventoryId}`
+- **Update Item Actual Stock**: `PUT /api/admin/inventory/material-items/${itemId}` (`{ actual_stock }`)
+- **Batch Update Items**: `PUT /api/admin/inventory/materials/${inventoryId}/items` (`{ items: [{ id, actual_stock }] }`)
+- **Approve / Reject**: `PUT /api/admin/inventory/materials/${inventoryId}/status` (`{ status: 'approve' | 'reject' }`) — *Approve overwrites `MaterialStock` for the branch with `actual_stock`.*
+
+---
+
 ## 4. Autonomous Refactoring Checklist for AI
 
 Please execute the following steps in sequence:
@@ -370,8 +501,12 @@ Please execute the following steps in sequence:
 - [ ] **Step 1**: Search for all occurrences of `stock` in `Product` TypeScript interfaces and Form components (`ProductForm`, `CreateProduct`, `EditProduct`). Delete the stock field and validation.
 - [ ] **Step 2**: Remove any check in POS / Cashier / Table order components where `product.stock` blocks an order.
 - [ ] **Step 3**: Search for `stock` in `MaterialForm` and `ProductRecipeForm`. Delete the stock input field, form state, and validation.
-- [ ] **Step 4**: Update Purchases form to add `branch_id` selection. Use `GET /api/admin/purchases/select-options` to populate the dropdown. Ensure `branch_id` is passed in the POST payload.
-- [ ] **Step 5**: Update Wastes form to add `branch_id` selection. Use `GET /api/admin/wastes/select-options` to populate the dropdown. Show available branch stock and handle 422 errors gracefully.
-- [ ] **Step 6**: Update Manufacturing form to add `branch_id` selection. Use `GET /api/admin/manufacturing/select-options` and pass `branch_id` to specifications and manufacturing execution endpoints.
-- [ ] **Step 7**: Update Materials and Product Recipes list tables: if branch filtering is implemented, populate branches using `/api/admin/materials/select-options` and `/api/admin/product-recipes/select-options` respectively.
-- [ ] **Step 8**: Run application build (`npm run build` or `npm run type-check`) to confirm 0 TypeScript / compilation errors.
+- [ ] **Step 4**: In Cashier Cart: handle 422 error on `POST /api/cashier/cart`. Prompt the cashier to retry with `without_recipe: true` to bypass ingredient checks if desired.
+- [ ] **Step 5**: Update Purchases form to add `branch_id` selection. Use `GET /api/admin/purchases/select-options` to populate the dropdown. Ensure `branch_id` is passed in the POST payload.
+- [ ] **Step 6**: Update Wastes form to add `branch_id` selection. Use `GET /api/admin/wastes/select-options` to populate the dropdown. Show available branch stock and handle 422 errors gracefully.
+- [ ] **Step 7**: Update Manufacturing form to add `branch_id` selection. Use `GET /api/admin/manufacturing/select-options` and pass `branch_id` to specifications and manufacturing execution endpoints.
+- [ ] **Step 8**: Update Materials and Product Recipes list tables: populate branches using `/api/admin/materials/select-options` and `/api/admin/product-recipes/select-options` respectively.
+- [ ] **Step 9**: Integrate Inventory (الجرد) screens:
+  - Implement Recipe Inventory: create, pending table, history table, count sheet editor, and approve/reject actions.
+  - Implement Material Inventory: create, pending table, history table, count sheet editor, and approve/reject actions.
+- [ ] **Step 10**: Run application build (`npm run build` or `npm run type-check`) to confirm 0 TypeScript / compilation errors.

@@ -64,4 +64,9 @@ class Material extends Model
     {
         return $this->hasMany(Waste::class);
     }
+
+    public function inventoryMaterials(): HasMany
+    {
+        return $this->hasMany(InventoryMaterial::class);
+    }
 }

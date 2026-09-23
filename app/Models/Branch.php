@@ -121,4 +121,9 @@ class Branch extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Waste::class);
     }
+
+    public function inventories(): HasMany
+    {
+        return $this->hasMany(Inventory::class);
+    }
 }

@@ -13,6 +13,8 @@ use App\Http\Controllers\api\admin\ExpenseListController;
 use App\Http\Controllers\api\admin\FinancialAccountController;
 use App\Http\Controllers\api\admin\HallController;
 use App\Http\Controllers\api\admin\HallTableController;
+use App\Http\Controllers\api\admin\InventoryMaterialController;
+use App\Http\Controllers\api\admin\InventoryRecipeController;
 use App\Http\Controllers\api\admin\KitchenController;
 use App\Http\Controllers\api\admin\ManufactringController;
 use App\Http\Controllers\api\admin\MaterialController;
@@ -124,6 +126,30 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('business-setup', [BusinessSetupController::class, 'index']);
     Route::post('business-setup', [BusinessSetupController::class, 'update']);
     Route::put('business-setup/{businessSetup?}', [BusinessSetupController::class, 'update']);
+
+    // Inventory routes for Product Recipes
+    Route::prefix('inventory/recipes')->group(function () {
+        Route::get('select-options', [InventoryRecipeController::class, 'selectOptions']);
+        Route::get('pending', [InventoryRecipeController::class, 'pending']);
+        Route::get('history', [InventoryRecipeController::class, 'history']);
+        Route::post('/', [InventoryRecipeController::class, 'store']);
+        Route::get('{inventory}', [InventoryRecipeController::class, 'show']);
+        Route::put('{inventory}/items', [InventoryRecipeController::class, 'updateActualStocks']);
+        Route::put('{inventory}/status', [InventoryRecipeController::class, 'changeStatus']);
+    });
+    Route::put('inventory/recipe-items/{item}', [InventoryRecipeController::class, 'updateItem']);
+
+    // Inventory routes for Materials
+    Route::prefix('inventory/materials')->group(function () {
+        Route::get('select-options', [InventoryMaterialController::class, 'selectOptions']);
+        Route::get('pending', [InventoryMaterialController::class, 'pending']);
+        Route::get('history', [InventoryMaterialController::class, 'history']);
+        Route::post('/', [InventoryMaterialController::class, 'store']);
+        Route::get('{inventory}', [InventoryMaterialController::class, 'show']);
+        Route::put('{inventory}/items', [InventoryMaterialController::class, 'updateActualStocks']);
+        Route::put('{inventory}/status', [InventoryMaterialController::class, 'changeStatus']);
+    });
+    Route::put('inventory/material-items/{item}', [InventoryMaterialController::class, 'updateItem']);
 });
 
 /*
