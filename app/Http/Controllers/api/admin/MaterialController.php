@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MaterialResource;
+use App\Models\Branch;
 use App\Models\Category;
 use App\Models\Material;
 use Illuminate\Http\JsonResponse;
@@ -151,6 +152,7 @@ class MaterialController extends Controller
         }
 
         return [
+            'branches' => Branch::select('id', 'name')->get(),
             'categories' => $query->select('id', 'name', 'type')->get(),
         ];
     }
