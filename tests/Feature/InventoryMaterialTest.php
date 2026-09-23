@@ -181,6 +181,8 @@ test('admin can view material inventory details with items', function () {
                         'material_id' => $this->material1->id,
                         'stock' => 50,
                         'actual_stock' => 45,
+                        'deficit' => 5,
+                        'shortage' => 5,
                         'difference' => -5,
                     ],
                 ],

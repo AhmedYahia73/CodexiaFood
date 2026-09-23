@@ -21,6 +21,8 @@ class InventoryProductRecipeResource extends JsonResource
             'product_recipe_name' => $this->productRecipe?->name,
             'stock' => (float) $this->stock,
             'actual_stock' => (float) $this->actual_stock,
+            'deficit' => (float) ($this->stock - $this->actual_stock),
+            'shortage' => (float) ($this->stock - $this->actual_stock),
             'difference' => (float) ($this->actual_stock - $this->stock),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

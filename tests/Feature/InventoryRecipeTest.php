@@ -181,6 +181,8 @@ test('admin can view recipe inventory details with item actual stock and differe
                         'product_recipe_id' => $this->recipe1->id,
                         'stock' => 15,
                         'actual_stock' => 12,
+                        'deficit' => 3,
+                        'shortage' => 3,
                         'difference' => -3,
                     ],
                 ],

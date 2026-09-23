@@ -230,6 +230,8 @@ export interface InventoryRecipeItem {
   product_recipe_name?: { en: string; ar: string } | string;
   stock: number;        // Snapshot of stock at inventory creation
   actual_stock: number; // Physical count entered by staff
+  deficit: number;      // العجز: stock - actual_stock (positive means deficit/shortage)
+  shortage: number;     // Alias of deficit
   difference: number;   // actual_stock - stock
 }
 
@@ -240,6 +242,8 @@ export interface InventoryMaterialItem {
   material_name?: { en: string; ar: string } | string;
   stock: number;        // Snapshot of stock at inventory creation
   actual_stock: number; // Physical count entered by staff
+  deficit: number;      // العجز: stock - actual_stock
+  shortage: number;     // Alias of deficit
   difference: number;   // actual_stock - stock
 }
 
@@ -251,6 +255,8 @@ export interface InventoryDetail {
   status: InventoryStatus;
   created_at: string;
   date: string;
+  total_items?: number;
+  total_deficit?: number; // Sum of positive deficits across all items
   items: (InventoryRecipeItem | InventoryMaterialItem)[];
 }
 ```
@@ -451,7 +457,7 @@ The system supports two independent stocktaking workflows: **Product Recipe Inve
 - **View Inventory Details & Count Items**:
   ```typescript
   const res = await api.get(`/api/admin/inventory/recipes/${inventoryId}`);
-  // data: { id, name, branch_name, status, items: [ { id, product_recipe_id, product_recipe_name, stock, actual_stock, difference } ] }
+  // data: { id, name, branch_name, status, total_items, total_deficit, items: [ { id, product_recipe_id, product_recipe_name, stock, actual_stock, deficit, shortage, difference } ] }
   ```
 - **Update Actual Stock for an Item**:
   ```typescript
