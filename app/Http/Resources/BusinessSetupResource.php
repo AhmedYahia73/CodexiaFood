@@ -33,6 +33,7 @@ class BusinessSetupResource extends JsonResource
             'logo' => $logoUrl,
             'raw_logo' => $this->logo,
             'description' => $this->description,
+            'branch_cover' => (float) ($this->branch_cover ?? 5.00),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

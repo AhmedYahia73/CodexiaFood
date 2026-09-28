@@ -19,5 +19,17 @@ class BusinessSetup extends Model
         'whats',
         'logo',
         'description',
+        'branch_cover',
     ];
+
+    protected $attributes = [
+        'branch_cover' => 5.00,
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'branch_cover' => 'decimal:2',
+        ];
+    }
 }

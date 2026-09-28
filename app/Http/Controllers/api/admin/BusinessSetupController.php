@@ -40,6 +40,7 @@ class BusinessSetupController extends Controller
             'instagram' => 'required|string|max:255',
             'whats' => 'required|string|max:255',
             'description' => 'required|string',
+            'branch_cover' => 'nullable|numeric|min:0',
             'logo' => $request->hasFile('logo')
                 ? 'required|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
                 : 'required|string|max:255',
@@ -68,6 +69,7 @@ class BusinessSetupController extends Controller
             'instagram' => $validated['instagram'],
             'whats' => $validated['whats'],
             'description' => $validated['description'],
+            'branch_cover' => $validated['branch_cover'] ?? ($setup?->branch_cover ?? 5.00),
         ];
 
         if ($logoPath !== null) {

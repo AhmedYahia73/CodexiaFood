@@ -20,6 +20,7 @@ class OrderCart extends Model
         'cashier_man_id',
         'branch_id',
         'hall_table_id',
+        'uu_id',
         'quantity',
         'notes',
     ];

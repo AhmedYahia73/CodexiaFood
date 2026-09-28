@@ -16,8 +16,11 @@ class Order extends Model
         'cashier_id',
         'cashier_man_id',
         'hall_table_id',
+        'branch_id',
         'module',
         'address',
+        'lat',
+        'lng',
         'note',
         'phone',
         'name',
@@ -32,11 +35,18 @@ class Order extends Model
     {
         return [
             'is_pos' => 'boolean',
+            'lat' => 'float',
+            'lng' => 'float',
             'total' => 'decimal:2',
             'total_tax' => 'decimal:2',
             'total_discount' => 'decimal:2',
             'final_price' => 'decimal:2',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function shift(): BelongsTo

@@ -35,6 +35,9 @@ use App\Http\Controllers\api\cashier\CashierHomeController;
 use App\Http\Controllers\api\cashier\CashierOrderController;
 use App\Http\Controllers\api\table\TableHomeController;
 use App\Http\Controllers\api\table\TableOrderCartController;
+use App\Http\Controllers\api\user\UserCartController;
+use App\Http\Controllers\api\user\UserHomeController;
+use App\Http\Controllers\api\user\UserOrderController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -209,3 +212,23 @@ Route::prefix('table-order')->group(function () {
 
 Route::get('tableOrder/{hallTable?}', [TableHomeController::class, 'tableInfo']);
 Route::get('table/{hallTable?}', [TableHomeController::class, 'tableInfo']);
+
+/*
+|--------------------------------------------------------------------------
+| Public User Home Routes (No Auth)
+|--------------------------------------------------------------------------
+*/
+Route::prefix('user')->group(function () {
+    Route::get('categories/parents', [UserHomeController::class, 'parentCategories']);
+    Route::get('categories/sub', [UserHomeController::class, 'subCategories']);
+    Route::get('products', [UserHomeController::class, 'products']);
+    Route::get('products/{product}', [UserHomeController::class, 'productDetails']);
+    Route::get('addons', [UserHomeController::class, 'addons']);
+    Route::get('business-setup', [UserHomeController::class, 'businessSetup']);
+
+    Route::delete('cart/clear', [UserCartController::class, 'clear']);
+    Route::apiResource('cart', UserCartController::class);
+
+    Route::post('orders/checkout', [UserOrderController::class, 'checkout']);
+    Route::get('orders/{order}', [UserOrderController::class, 'show']);
+});
