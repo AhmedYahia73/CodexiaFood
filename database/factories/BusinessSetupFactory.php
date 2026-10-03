@@ -25,6 +25,9 @@ class BusinessSetupFactory extends Factory
             'whats' => fake()->phoneNumber(),
             'logo' => 'business_setup/logo.png',
             'description' => fake()->paragraph(),
+            'branch_cover' => 5.00,
+            'start_day' => '09:00:00',
+            'end_day' => '03:00:00',
         ];
     }
 }

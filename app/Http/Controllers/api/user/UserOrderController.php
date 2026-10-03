@@ -17,6 +17,7 @@ use App\Models\ProductManufacturing;
 use App\Models\ProductRecipeStock;
 use App\Services\GeofenceService;
 use App\Services\PriceCalculatorService;
+use App\Services\RestaurantWorkingHoursService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,8 @@ class UserOrderController extends Controller
 {
     public function __construct(
         protected PriceCalculatorService $priceCalculator,
-        protected GeofenceService $geofenceService
+        protected GeofenceService $geofenceService,
+        protected RestaurantWorkingHoursService $workingHoursService
     ) {}
 
     private function getUuId(Request $request): ?string
@@ -133,6 +135,13 @@ class UserOrderController extends Controller
      */
     public function checkout(Request $request): JsonResponse
     {
+        if (! $this->workingHoursService->isOpen()) {
+            return response()->json([
+                'status' => false,
+                'message' => $this->workingHoursService->getClosedMessage(),
+            ], 400);
+        }
+
         if (! $request->has('uu_id') && $this->getUuId($request)) {
             $request->merge(['uu_id' => $this->getUuId($request)]);
         }
@@ -209,6 +218,15 @@ class UserOrderController extends Controller
              * @example "delivery"
              */
             'module' => 'nullable|string|in:delivery,takeaway,dinein',
+
+            /**
+             * Language preference (ar or en).
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $userLat = (float) $validated['lat'];

@@ -7,6 +7,7 @@ use App\Models\OrderAddonCart;
 use App\Models\OrderCart;
 use App\Models\OrderVariationCart;
 use App\Services\PriceCalculatorService;
+use App\Services\RestaurantWorkingHoursService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,8 +16,21 @@ use Illuminate\Support\Facades\DB;
 class UserCartController extends Controller
 {
     public function __construct(
-        protected PriceCalculatorService $priceCalculator
+        protected PriceCalculatorService $priceCalculator,
+        protected RestaurantWorkingHoursService $workingHoursService
     ) {}
+
+    protected function checkRestaurantOpen(): ?JsonResponse
+    {
+        if (! $this->workingHoursService->isOpen()) {
+            return response()->json([
+                'status' => false,
+                'message' => $this->workingHoursService->getClosedMessage(),
+            ], 400);
+        }
+
+        return null;
+    }
 
     private function getLocale(Request $request): string
     {
@@ -56,8 +70,11 @@ class UserCartController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'uu_id' => 'sometimes|string',
+            'uu_id' => 'sometimes|nullable|string|max:255',
+            'module' => 'sometimes|nullable|string|in:takeaway,dinein,delivery',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
+
         $uuId = $this->getUuId($request);
         if (! $uuId) {
             return response()->json([
@@ -73,16 +90,12 @@ class UserCartController extends Controller
             ], 400);
         }
 
-        $request->validate([
-            'module' => 'nullable|string|in:takeaway,dinein,delivery',
-        ]);
-
         $locale = $this->getLocale($request);
 
         $query = $this->cartQuery($uuId);
 
-        if ($request->filled('module')) {
-            $query->where('module', $request->query('module'));
+        if (! empty($validated['module'])) {
+            $query->where('module', $validated['module']);
         }
 
         $carts = $query->latest('id')->get();
@@ -106,6 +119,10 @@ class UserCartController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        if ($closedResponse = $this->checkRestaurantOpen()) {
+            return $closedResponse;
+        }
+
         $uuId = $this->getUuId($request);
         if (! $uuId) {
             return response()->json([
@@ -115,7 +132,7 @@ class UserCartController extends Controller
         }
 
         $validated = $request->validate([
-            'uu_id' => 'sometimes|string',
+            'uu_id' => 'sometimes|nullable|string|max:255',
             'module' => 'nullable|string|in:takeaway,dinein,delivery',
             'product_id' => 'required|exists:products,id',
             'quantity' => 'nullable|integer|min:1',
@@ -126,6 +143,7 @@ class UserCartController extends Controller
             'variations.*.option_ids.*' => 'exists:options,id',
             'addons' => 'nullable|array',
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
@@ -185,6 +203,11 @@ class UserCartController extends Controller
      */
     public function show(Request $request, OrderCart $cart): JsonResponse
     {
+        $request->validate([
+            'uu_id' => 'sometimes|nullable|string|max:255',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $uuId = $this->getUuId($request);
         if ($uuId && $cart->uu_id !== $uuId) {
             return response()->json([
@@ -217,6 +240,15 @@ class UserCartController extends Controller
      */
     public function update(Request $request, OrderCart $cart): JsonResponse
     {
+        if ($closedResponse = $this->checkRestaurantOpen()) {
+            return $closedResponse;
+        }
+
+        $request->validate([
+            'uu_id' => 'sometimes|nullable|string|max:255',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $uuId = $this->getUuId($request);
         if ($uuId && $cart->uu_id !== $uuId) {
             return response()->json([
@@ -235,6 +267,8 @@ class UserCartController extends Controller
             'variations.*.option_ids.*' => 'exists:options,id',
             'addons' => 'nullable|array',
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
+            'uu_id' => 'sometimes|nullable|string|max:255',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
@@ -300,6 +334,14 @@ class UserCartController extends Controller
      */
     public function destroy(Request $request, OrderCart $cart): JsonResponse
     {
+        if ($closedResponse = $this->checkRestaurantOpen()) {
+            return $closedResponse;
+        }
+
+        $request->validate([
+            'uu_id' => 'sometimes|nullable|string|max:255',
+        ]);
+
         $uuId = $this->getUuId($request);
         if ($uuId && $cart->uu_id !== $uuId) {
             return response()->json([
@@ -321,6 +363,15 @@ class UserCartController extends Controller
      */
     public function clear(Request $request): JsonResponse
     {
+        if ($closedResponse = $this->checkRestaurantOpen()) {
+            return $closedResponse;
+        }
+
+        $validated = $request->validate([
+            'uu_id' => 'sometimes|nullable|string|max:255',
+            'module' => 'sometimes|nullable|string|in:takeaway,dinein,delivery',
+        ]);
+
         $uuId = $this->getUuId($request);
         if (! $uuId) {
             return response()->json([
@@ -331,8 +382,8 @@ class UserCartController extends Controller
 
         $query = OrderCart::where('uu_id', $uuId);
 
-        if ($request->filled('module')) {
-            $query->where('module', $request->query('module'));
+        if (! empty($validated['module'])) {
+            $query->where('module', $validated['module']);
         }
 
         $query->delete();

@@ -34,6 +34,11 @@ class BusinessSetupResource extends JsonResource
             'raw_logo' => $this->logo,
             'description' => $this->description,
             'branch_cover' => (float) ($this->branch_cover ?? 5.00),
+            'start_day' => $this->start_day ? substr((string) $this->start_day, 0, 5) : '09:00',
+            'end_day' => $this->end_day ? substr((string) $this->end_day, 0, 5) : '03:00',
+            'is_open' => (bool) $this->isOpen(),
+            'is_overnight' => (bool) $this->isOvernight(),
+            'working_hours_text' => 'من '.($this->start_day ? substr((string) $this->start_day, 0, 5) : '09:00').' إلى '.($this->end_day ? substr((string) $this->end_day, 0, 5) : '03:00'),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

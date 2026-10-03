@@ -16,8 +16,12 @@ class BusinessSetupController extends Controller
     /**
      * Display the first business setup record.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $businessSetup = BusinessSetup::first();
 
         return response()->json([
@@ -41,6 +45,8 @@ class BusinessSetupController extends Controller
             'whats' => 'required|string|max:255',
             'description' => 'required|string',
             'branch_cover' => 'nullable|numeric|min:0',
+            'start_day' => ['nullable', 'regex:/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
+            'end_day' => ['nullable', 'regex:/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
             'logo' => $request->hasFile('logo')
                 ? 'required|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
                 : 'required|string|max:255',
@@ -71,6 +77,13 @@ class BusinessSetupController extends Controller
             'description' => $validated['description'],
             'branch_cover' => $validated['branch_cover'] ?? ($setup?->branch_cover ?? 5.00),
         ];
+
+        if (array_key_exists('start_day', $validated)) {
+            $data['start_day'] = $validated['start_day'] ? (strlen($validated['start_day']) === 5 ? $validated['start_day'].':00' : $validated['start_day']) : null;
+        }
+        if (array_key_exists('end_day', $validated)) {
+            $data['end_day'] = $validated['end_day'] ? (strlen($validated['end_day']) === 5 ? $validated['end_day'].':00' : $validated['end_day']) : null;
+        }
 
         if ($logoPath !== null) {
             $data['logo'] = $logoPath;

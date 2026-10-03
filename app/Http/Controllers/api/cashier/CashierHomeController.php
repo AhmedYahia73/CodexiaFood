@@ -62,6 +62,10 @@ class CashierHomeController extends Controller
      */
     public function parentCategories(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $categories = Category::whereNull('category_id')
@@ -88,12 +92,17 @@ class CashierHomeController extends Controller
      */
     public function subCategories(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'category_id' => 'sometimes|nullable|integer|exists:categories,id',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $query = Category::whereNotNull('category_id')->where('status', true);
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->query('category_id'));
+        if (! empty($validated['category_id'])) {
+            $query->where('category_id', $validated['category_id']);
         }
 
         $categories = $query->latest()
@@ -116,6 +125,10 @@ class CashierHomeController extends Controller
 
     public function cashiers(Request $request): JsonResponse
     {
+        $request->validate([
+            'branch_id' => 'sometimes|nullable|integer|exists:branches,id',
+        ]);
+
         $data = Cashier::where('branch_id', $request->user()->branch_id)
             ->whereNull('cashier_man_id')
             ->get()
@@ -135,16 +148,22 @@ class CashierHomeController extends Controller
      */
     public function products(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'category_id' => 'sometimes|nullable|integer|exists:categories,id',
+            'sub_category_id' => 'sometimes|nullable|integer|exists:categories,id',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $query = Product::with(['discount', 'tax'])->latest();
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->query('category_id'));
+        if (! empty($validated['category_id'])) {
+            $query->where('category_id', $validated['category_id']);
         }
 
-        if ($request->filled('sub_category_id')) {
-            $query->where('sub_category_id', $request->query('sub_category_id'));
+        if (! empty($validated['sub_category_id'])) {
+            $query->where('sub_category_id', $validated['sub_category_id']);
         }
 
         $products = $query->get()->map(function (Product $product) use ($locale) {
@@ -187,6 +206,10 @@ class CashierHomeController extends Controller
      */
     public function productDetails(Request $request, Product $product): JsonResponse
     {
+        $request->validate([
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $product->load(['discount', 'tax', 'variations.options']);
@@ -246,6 +269,10 @@ class CashierHomeController extends Controller
      */
     public function addons(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $addons = Addon::with(['discount', 'tax'])
@@ -275,6 +302,10 @@ class CashierHomeController extends Controller
      */
     public function halls(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $halls = Hall::where('status', true)
@@ -298,12 +329,17 @@ class CashierHomeController extends Controller
      */
     public function hallTables(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'hall_id' => 'sometimes|nullable|integer|exists:halls,id',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
 
         $query = HallTable::where('status', true);
 
-        if ($request->filled('hall_id')) {
-            $query->where('hall_id', $request->query('hall_id'));
+        if (! empty($validated['hall_id'])) {
+            $query->where('hall_id', $validated['hall_id']);
         }
 
         $tables = $query->get()->map(fn (HallTable $table) => [
@@ -328,7 +364,8 @@ class CashierHomeController extends Controller
     {
         $validated = $request->validate([
             'cashier_id' => 'required|exists:cashiers,id',
-            'cashier_man_id' => 'nullable|exists:cashier_men,id',
+            'cashier_man_id' => 'sometimes|nullable|exists:cashier_men,id',
+            'branch_id' => 'sometimes|nullable|exists:branches,id',
         ]);
 
         $cashierMan = auth()->user();
@@ -340,7 +377,7 @@ class CashierHomeController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'هذا الكاشير مرتبط بكاشير مان اخر',
-            ]);
+            ], 400);
 
         }
         $hasOpenShift = StartShift::where('cashier_man_id', $cashierManId)
@@ -352,7 +389,7 @@ class CashierHomeController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'يرجى غلق الشيفت السابق اولا',
-            ]);
+            ], 400);
         }
 
         if ($cashierMan) {
@@ -383,9 +420,12 @@ class CashierHomeController extends Controller
      */
     public function checkStartShift(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'branch_id' => 'sometimes|nullable|exists:branches,id',
+        ]);
 
         $cashierMan = auth()->user();
-        $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
+        $branchId = $validated['branch_id'] ?? $cashierMan?->branch_id;
 
         $hasOpenShift = StartShift::where('cashier_man_id', $cashierMan->id)
             ->where('branch_id', $branchId)
@@ -412,12 +452,13 @@ class CashierHomeController extends Controller
     {
         $validated = $request->validate([
             'total_mony' => 'required|numeric|min:0',
+            'branch_id' => 'sometimes|nullable|exists:branches,id',
         ]);
 
         $totalMony = (float) $validated['total_mony'];
         $cashierMan = auth()->user();
         $cashierManId = $cashierMan?->id;
-        $branchId = $cashierMan?->branch_id ?? $request->input('branch_id');
+        $branchId = $validated['branch_id'] ?? $cashierMan?->branch_id;
 
         $openShift = StartShift::where('cashier_man_id', $cashierManId)
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
@@ -480,8 +521,12 @@ class CashierHomeController extends Controller
     /**
      * Get business setup details for cashier.
      */
-    public function businessSetup(): JsonResponse
+    public function businessSetup(Request $request): JsonResponse
     {
+        $request->validate([
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $businessSetup = BusinessSetup::first();
 
         return response()->json([

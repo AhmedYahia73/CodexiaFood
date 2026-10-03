@@ -68,6 +68,7 @@ class CashierCartController extends Controller
 
         $validated = $request->validate([
             'module' => 'required|in:takeaway,dinein,delivery',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
@@ -364,10 +365,14 @@ class CashierCartController extends Controller
             ], 400);
         }
 
+        $validated = $request->validate([
+            'module' => 'sometimes|nullable|string|in:takeaway,dinein,delivery',
+        ]);
+
         $query = OrderCart::where('cashier_id', $cashierId);
 
-        if ($request->filled('module')) {
-            $query->where('module', $request->query('module'));
+        if (! empty($validated['module'])) {
+            $query->where('module', $validated['module']);
         }
 
         $query->delete();

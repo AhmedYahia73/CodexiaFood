@@ -21,6 +21,9 @@ class BusinessSetupSeeder extends Seeder
                 'whats' => '01000000000',
                 'logo' => 'business_setup/default_logo.png',
                 'description' => 'أشهى المأكولات والمشروبات بأعلى معايير الجودة والخدمة الممتازة.',
+                'branch_cover' => 5.00,
+                'start_day' => '09:00:00',
+                'end_day' => '03:00:00',
             ]);
         }
     }

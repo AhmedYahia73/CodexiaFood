@@ -16,6 +16,7 @@ use App\Models\OrderProduct;
 use App\Models\OrderPVariation;
 use App\Models\Product;
 use App\Models\Shift;
+use App\Services\RestaurantWorkingHoursService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,10 @@ use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    public function __construct(
+        protected RestaurantWorkingHoursService $workingHoursService
+    ) {}
+
     private function orderQuery(): Builder
     {
         return Order::with([
@@ -38,8 +43,37 @@ class OrderController extends Controller
         ])->latest('id');
     }
 
-    public function selectOptions(): JsonResponse
+    private function applyDateFilters(Builder $query, Request $request): Builder
     {
+        if ($request->query('date') === 'all' || $request->boolean('all_dates') || $request->query('all') === 'true') {
+            return $query;
+        }
+
+        if ($request->filled('date')) {
+            $range = $this->workingHoursService->getRangeForDate($request->query('date'));
+
+            return $query->whereBetween('created_at', [$range['start'], $range['end']]);
+        }
+
+        if ($request->filled('from_date') || $request->filled('start_date')) {
+            $fromDate = $request->query('from_date') ?? $request->query('start_date');
+            $toDate = $request->query('to_date') ?? $request->query('end_date') ?? $fromDate;
+            $range = $this->workingHoursService->getRangeBetweenDates($fromDate, $toDate);
+
+            return $query->whereBetween('created_at', [$range['start'], $range['end']]);
+        }
+
+        $range = $this->workingHoursService->getTodayAndYesterdayRange();
+
+        return $query->where('created_at', '>=', $range['start']);
+    }
+
+    public function selectOptions(Request $request): JsonResponse
+    {
+        $request->validate([
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         return response()->json([
             'status' => true,
             'data' => [
@@ -56,6 +90,136 @@ class OrderController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
+        $validated = $request->validate([
+            /**
+             * Filter by order type: pos (true) or online (false).
+             *
+             * @var string|null
+             *
+             * @example "false"
+             */
+            'is_pos' => 'sometimes|nullable|string',
+
+            /**
+             * Filter by shift ID.
+             *
+             * @var int|null
+             */
+            'shift_id' => 'sometimes|nullable|integer|exists:shifts,id',
+
+            /**
+             * Filter by order module.
+             *
+             * @var string|null
+             *
+             * @example "delivery"
+             */
+            'module' => 'sometimes|nullable|string|in:takeaway,dinein,delivery',
+
+            /**
+             * Specific business date filter (YYYY-MM-DD) or 'all' for full history.
+             *
+             * @var string|null
+             *
+             * @example "2026-10-03"
+             */
+            'date' => 'sometimes|nullable|string',
+
+            /**
+             * Start date for range filtering (YYYY-MM-DD).
+             *
+             * @var string|null
+             *
+             * @example "2026-10-01"
+             */
+            'from_date' => 'sometimes|nullable|date',
+
+            /**
+             * End date for range filtering (YYYY-MM-DD).
+             *
+             * @var string|null
+             *
+             * @example "2026-10-03"
+             */
+            'to_date' => 'sometimes|nullable|date',
+
+            /**
+             * Alias for start date range filtering.
+             *
+             * @var string|null
+             */
+            'start_date' => 'sometimes|nullable|date',
+
+            /**
+             * Alias for end date range filtering.
+             *
+             * @var string|null
+             */
+            'end_date' => 'sometimes|nullable|date',
+
+            /**
+             * Bypass date filtering to fetch all historical orders.
+             *
+             * @var bool|null
+             */
+            'all_dates' => 'sometimes|nullable|boolean',
+
+            /**
+             * Page number for pagination.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'page' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Current page number alias.
+             *
+             * @var int|null
+             */
+            'current_page' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Items per page.
+             *
+             * @var int|null
+             *
+             * @example 15
+             */
+            'per_page' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Items per page alias.
+             *
+             * @var int|null
+             */
+            'perPage' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Items per page alias.
+             *
+             * @var int|null
+             */
+            'pageSize' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Items per page alias.
+             *
+             * @var int|null
+             */
+            'limit' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Response language (ar or en).
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $query = $this->orderQuery();
 
         if ($request->filled('is_pos') && ! in_array($request->query('is_pos'), ['all', 'undefined', 'null'], true)) {
@@ -73,14 +237,16 @@ class OrderController extends Controller
             $query->where('module', $request->query('module'));
         }
 
-        $perPage = (int) ($request->input('per_page')
-            ?? $request->input('perPage')
-            ?? $request->input('limit')
-            ?? $request->input('pageSize')
+        $this->applyDateFilters($query, $request);
+
+        $perPage = (int) ($validated['per_page']
+            ?? $validated['perPage']
+            ?? $validated['limit']
+            ?? $validated['pageSize']
             ?? 15);
 
-        $page = (int) ($request->input('page')
-            ?? $request->input('current_page')
+        $page = (int) ($validated['page']
+            ?? $validated['current_page']
             ?? $request->input('currentPage')
             ?? $request->input('p')
             ?? 1);
@@ -95,16 +261,89 @@ class OrderController extends Controller
         return OrderResource::collection($orders);
     }
 
+    /**
+     * Check difference of today and yesterday online orders count against client count.
+     */
+    public function checkNewOrders(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Current count of orders loaded on the client side for today and yesterday.
+             *
+             * @var int|null
+             *
+             * @example 10
+             */
+            'count' => 'sometimes|nullable|integer|min:0',
+
+            /**
+             * Client count alias.
+             *
+             * @var int|null
+             */
+            'client_count' => 'sometimes|nullable|integer|min:0',
+
+            /**
+             * Orders count alias.
+             *
+             * @var int|null
+             */
+            'orders_count' => 'sometimes|nullable|integer|min:0',
+        ]);
+
+        $clientCount = (int) ($validated['count']
+            ?? $validated['client_count']
+            ?? $validated['orders_count']
+            ?? 0);
+
+        $range = $this->workingHoursService->getTodayAndYesterdayRange();
+
+        $query = Order::query()
+            ->where('is_pos', false)
+            ->where('created_at', '>=', $range['start']);
+
+        $serverCount = $query->count();
+        $difference = max(0, $serverCount - $clientCount);
+
+        $orderIds = [];
+        if ($difference > 0) {
+            $orderIds = $query->latest('id')
+                ->take($difference)
+                ->pluck('id')
+                ->values()
+                ->all();
+        }
+
+        return response()->json([
+            'status' => true,
+            'server_count' => $serverCount,
+            'client_count' => $clientCount,
+            'difference' => $difference,
+            'has_new' => $difference > 0,
+            'order_ids' => $orderIds,
+        ]);
+    }
+
     public function posOrders(Request $request): AnonymousResourceCollection
     {
-        $perPage = (int) ($request->input('per_page')
-            ?? $request->input('perPage')
-            ?? $request->input('limit')
-            ?? $request->input('pageSize')
+        $validated = $request->validate([
+            'page' => 'sometimes|nullable|integer|min:1',
+            'current_page' => 'sometimes|nullable|integer|min:1',
+            'per_page' => 'sometimes|nullable|integer|min:1',
+            'perPage' => 'sometimes|nullable|integer|min:1',
+            'pageSize' => 'sometimes|nullable|integer|min:1',
+            'limit' => 'sometimes|nullable|integer|min:1',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $perPage = (int) ($validated['per_page']
+            ?? $validated['perPage']
+            ?? $validated['limit']
+            ?? $validated['pageSize']
             ?? 15);
 
-        $page = (int) ($request->input('page')
-            ?? $request->input('current_page')
+        $page = (int) ($validated['page']
+            ?? $validated['current_page']
             ?? $request->input('currentPage')
             ?? $request->input('p')
             ?? 1);
@@ -123,14 +362,24 @@ class OrderController extends Controller
 
     public function onlineOrders(Request $request): AnonymousResourceCollection
     {
-        $perPage = (int) ($request->input('per_page')
-            ?? $request->input('perPage')
-            ?? $request->input('limit')
-            ?? $request->input('pageSize')
+        $validated = $request->validate([
+            'page' => 'sometimes|nullable|integer|min:1',
+            'current_page' => 'sometimes|nullable|integer|min:1',
+            'per_page' => 'sometimes|nullable|integer|min:1',
+            'perPage' => 'sometimes|nullable|integer|min:1',
+            'pageSize' => 'sometimes|nullable|integer|min:1',
+            'limit' => 'sometimes|nullable|integer|min:1',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $perPage = (int) ($validated['per_page']
+            ?? $validated['perPage']
+            ?? $validated['limit']
+            ?? $validated['pageSize']
             ?? 15);
 
-        $page = (int) ($request->input('page')
-            ?? $request->input('current_page')
+        $page = (int) ($validated['page']
+            ?? $validated['current_page']
             ?? $request->input('currentPage')
             ?? $request->input('p')
             ?? 1);

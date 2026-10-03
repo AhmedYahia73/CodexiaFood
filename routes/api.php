@@ -94,6 +94,8 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
 
     Route::get('orders/pos', [OrderController::class, 'posOrders']);
     Route::get('orders/online', [OrderController::class, 'onlineOrders']);
+    Route::get('orders/check-new', [OrderController::class, 'checkNewOrders']);
+    Route::post('orders/check-new', [OrderController::class, 'checkNewOrders']);
 
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::get('dashboard/statistics', [DashboardController::class, 'statistics']);
@@ -178,9 +180,8 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
 
     Route::post('orders/checkout', [CashierOrderController::class, 'checkout']);
     Route::apiResource('orders', CashierOrderController::class)->only(['index', 'show']);
+    Route::get('business-setup', [CashierHomeController::class, 'businessSetup']);
 });
-
-Route::get('business-setup', [CashierHomeController::class, 'businessSetup']);
 /*
 |--------------------------------------------------------------------------
 | Public Table Order Routes (No Auth)
