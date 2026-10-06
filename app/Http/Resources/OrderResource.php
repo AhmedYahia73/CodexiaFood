@@ -41,6 +41,7 @@ class OrderResource extends JsonResource
             'phone' => $this->phone,
             'name' => $this->name,
             'is_pos' => (bool) $this->is_pos,
+            'status' => $this->status,
             'total' => (float) $this->total,
             'total_tax' => (float) $this->total_tax,
             'total_discount' => (float) $this->total_discount,

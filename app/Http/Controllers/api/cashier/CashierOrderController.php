@@ -15,6 +15,7 @@ use App\Models\OrderPVariation;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipeStock;
 use App\Models\StartShift;
+use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,8 @@ use Illuminate\Support\Facades\DB;
 class CashierOrderController extends Controller
 {
     public function __construct(
-        protected PriceCalculatorService $priceCalculator
+        protected PriceCalculatorService $priceCalculator,
+        protected KitchenDispatchService $kitchenDispatch,
     ) {}
 
     /**
@@ -251,6 +253,7 @@ class CashierOrderController extends Controller
                 'phone' => $validated['phone'] ?? null,
                 'name' => $validated['name'] ?? null,
                 'is_pos' => true,
+                'status' => $validated['module'] === 'dinein' ? 'pickup' : 'preparing',
                 'total' => $grandTotals['grand_total_price'],
                 'total_discount' => $grandTotals['grand_total_discount'],
                 'total_tax' => $grandTotals['grand_total_tax'],
@@ -363,6 +366,11 @@ class CashierOrderController extends Controller
             'orderProducts.variations.options.option',
             'orderProducts.addons.addon',
         ]);
+
+        // Dispatch to kitchen queues (dinein is handled per-cart, not at order level)
+        if ($order->module !== 'dinein') {
+            $this->kitchenDispatch->dispatchFromOrder($order);
+        }
 
         return response()->json([
             'status' => true,

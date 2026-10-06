@@ -16,6 +16,7 @@ use App\Models\OrderPVariation;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipeStock;
 use App\Services\GeofenceService;
+use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
 use App\Services\RestaurantWorkingHoursService;
 use Illuminate\Http\JsonResponse;
@@ -27,7 +28,8 @@ class UserOrderController extends Controller
     public function __construct(
         protected PriceCalculatorService $priceCalculator,
         protected GeofenceService $geofenceService,
-        protected RestaurantWorkingHoursService $workingHoursService
+        protected RestaurantWorkingHoursService $workingHoursService,
+        protected KitchenDispatchService $kitchenDispatch,
     ) {}
 
     private function getUuId(Request $request): ?string
@@ -288,6 +290,7 @@ class UserOrderController extends Controller
                 'phone' => $validated['phone'],
                 'name' => $validated['name'],
                 'is_pos' => false,
+                'status' => 'preparing',
                 'total' => $grandTotals['grand_total_price'],
                 'total_discount' => $grandTotals['grand_total_discount'],
                 'total_tax' => $grandTotals['grand_total_tax'],
@@ -393,6 +396,8 @@ class UserOrderController extends Controller
             'orderProducts.variations.options.option',
             'orderProducts.addons.addon',
         ]);
+
+        $this->kitchenDispatch->dispatchFromOrder($order);
 
         return response()->json([
             'status' => true,

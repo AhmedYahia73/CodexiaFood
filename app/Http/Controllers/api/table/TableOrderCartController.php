@@ -9,6 +9,7 @@ use App\Models\OrderAddonCart;
 use App\Models\OrderCart;
 use App\Models\OrderVariationCart;
 use App\Services\GeofenceService;
+use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -205,6 +206,9 @@ class TableOrderCartController extends Controller
 
         $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
         $calculated['table_code'] = $hallTable->code;
+
+        // Dispatch dinein cart item to kitchen for preparation
+        app(KitchenDispatchService::class)->dispatchFromCart($cart);
 
         return response()->json([
             'status' => true,

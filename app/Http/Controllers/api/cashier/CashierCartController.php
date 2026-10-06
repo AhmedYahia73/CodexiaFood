@@ -10,6 +10,7 @@ use App\Models\OrderCart;
 use App\Models\OrderVariationCart;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipeStock;
+use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -234,6 +235,10 @@ class CashierCartController extends Controller
         ]);
 
         $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+
+        if ($cart->module === 'dinein') {
+            app(KitchenDispatchService::class)->dispatchFromCart($cart);
+        }
 
         return response()->json([
             'status' => true,

@@ -23,6 +23,7 @@ class OrderCart extends Model
         'uu_id',
         'quantity',
         'notes',
+        'status',
     ];
 
     protected function casts(): array
@@ -31,6 +32,15 @@ class OrderCart extends Model
             'quantity' => 'integer',
         ];
     }
+
+    /**
+     * Statuses that trigger KitchenOrder cleanup when set.
+     */
+    public static array $kitchenCleanupStatuses = [
+        'done',
+        'pickup',
+        'return',
+    ];
 
     public function product(): BelongsTo
     {
@@ -65,5 +75,10 @@ class OrderCart extends Model
     public function hallTable(): BelongsTo
     {
         return $this->belongsTo(HallTable::class);
+    }
+
+    public function kitchenOrders(): HasMany
+    {
+        return $this->hasMany(KitchenOrder::class);
     }
 }

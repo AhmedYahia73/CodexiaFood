@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Order;
+use App\Models\OrderCart;
+use App\Observers\OrderCartObserver;
+use App\Observers\OrderObserver;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -23,5 +27,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('viewApiDocs', function ($user = null) {
             return true;
         });
+
+        Order::observe(OrderObserver::class);
+        OrderCart::observe(OrderCartObserver::class);
     }
 }

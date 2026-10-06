@@ -16,6 +16,7 @@ class Addon extends Model
         'image',
         'tax_id',
         'discount_id',
+        'kitchen_id',
     ];
 
     protected function casts(): array
@@ -34,5 +35,10 @@ class Addon extends Model
     public function discount(): BelongsTo
     {
         return $this->belongsTo(Discount::class);
+    }
+
+    public function kitchen(): BelongsTo
+    {
+        return $this->belongsTo(Kitchen::class);
     }
 }

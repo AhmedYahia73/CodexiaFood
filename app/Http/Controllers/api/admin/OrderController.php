@@ -16,6 +16,7 @@ use App\Models\OrderProduct;
 use App\Models\OrderPVariation;
 use App\Models\Product;
 use App\Models\Shift;
+use App\Services\KitchenDispatchService;
 use App\Services\RestaurantWorkingHoursService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -26,7 +27,8 @@ use Illuminate\Support\Facades\DB;
 class OrderController extends Controller
 {
     public function __construct(
-        protected RestaurantWorkingHoursService $workingHoursService
+        protected RestaurantWorkingHoursService $workingHoursService,
+        protected KitchenDispatchService $kitchenDispatch,
     ) {}
 
     private function orderQuery(): Builder
@@ -442,6 +444,7 @@ class OrderController extends Controller
                 'phone' => $validated['phone'] ?? null,
                 'name' => $validated['name'] ?? null,
                 'is_pos' => $validated['is_pos'] ?? true,
+                'status' => $validated['module'] === 'dinein' ? 'pickup' : 'preparing',
                 'total' => $validated['total'],
                 'total_tax' => $validated['total_tax'] ?? 0,
                 'total_discount' => $validated['total_discount'] ?? 0,
@@ -495,6 +498,11 @@ class OrderController extends Controller
             'orderProducts.addons.addon',
         ]);
 
+        // Dispatch to kitchen queues (skipped for dinein which is handled at cart level)
+        if ($order->module !== 'dinein') {
+            $this->kitchenDispatch->dispatchFromOrder($order);
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Order created successfully.',
@@ -518,6 +526,33 @@ class OrderController extends Controller
         return response()->json([
             'status' => true,
             'data' => new OrderResource($order),
+        ]);
+    }
+
+    /**
+     * Update order status with module-specific allowed transitions.
+     *
+     * Delivery  → done, out_of_delivery, delivered, return, failed_to_delivered
+     * Takeaway  → done, pickup, return
+     * Dinein    → return
+     */
+    public function updateStatus(Request $request, Order $order): JsonResponse
+    {
+        $allowedStatuses = Order::$allowedStatusTransitions[$order->module] ?? [];
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:'.implode(',', $allowedStatuses)],
+        ]);
+
+        $order->update(['status' => $validated['status']]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Order status updated successfully.',
+            'data' => [
+                'id' => $order->id,
+                'status' => $order->status,
+            ],
         ]);
     }
 

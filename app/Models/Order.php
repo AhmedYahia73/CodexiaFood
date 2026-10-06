@@ -25,6 +25,7 @@ class Order extends Model
         'phone',
         'name',
         'is_pos',
+        'status',
         'total',
         'total_tax',
         'total_discount',
@@ -43,6 +44,28 @@ class Order extends Model
             'final_price' => 'decimal:2',
         ];
     }
+
+    /**
+     * Statuses that trigger KitchenOrder cleanup when set.
+     */
+    public static array $kitchenCleanupStatuses = [
+        'done',
+        'pickup',
+        'out_of_delivery',
+        'delivered',
+        'return',
+        'failed_to_delivered',
+        'faild_to_delivered',
+    ];
+
+    /**
+     * Allowed status transitions per module for admin.
+     */
+    public static array $allowedStatusTransitions = [
+        'delivery' => ['done', 'out_of_delivery', 'delivered', 'return', 'failed_to_delivered', 'faild_to_delivered'],
+        'takeaway' => ['done', 'pickup', 'return'],
+        'dinein' => ['return'],
+    ];
 
     public function branch(): BelongsTo
     {
@@ -72,5 +95,10 @@ class Order extends Model
     public function orderProducts(): HasMany
     {
         return $this->hasMany(OrderProduct::class);
+    }
+
+    public function kitchenOrders(): HasMany
+    {
+        return $this->hasMany(KitchenOrder::class);
     }
 }

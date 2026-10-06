@@ -20,6 +20,7 @@ class Product extends Model
         'discount_id',
         'category_id',
         'sub_category_id',
+        'kitchen_id',
     ];
 
     protected function casts(): array
@@ -69,5 +70,10 @@ class Product extends Model
     public function manufacturingLists(): HasMany
     {
         return $this->hasMany(ManufacturingList::class);
+    }
+
+    public function kitchen(): BelongsTo
+    {
+        return $this->belongsTo(Kitchen::class);
     }
 }

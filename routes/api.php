@@ -16,6 +16,7 @@ use App\Http\Controllers\api\admin\HallTableController;
 use App\Http\Controllers\api\admin\InventoryMaterialController;
 use App\Http\Controllers\api\admin\InventoryRecipeController;
 use App\Http\Controllers\api\admin\KitchenController;
+use App\Http\Controllers\api\admin\KitchenProductController;
 use App\Http\Controllers\api\admin\ManufactringController;
 use App\Http\Controllers\api\admin\MaterialController;
 use App\Http\Controllers\api\admin\OrderController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\api\AuthController;
 use App\Http\Controllers\api\cashier\CashierCartController;
 use App\Http\Controllers\api\cashier\CashierHomeController;
 use App\Http\Controllers\api\cashier\CashierOrderController;
+use App\Http\Controllers\api\kitchen\KitchenOrderController;
 use App\Http\Controllers\api\table\TableHomeController;
 use App\Http\Controllers\api\table\TableOrderCartController;
 use App\Http\Controllers\api\user\UserCartController;
@@ -96,6 +98,13 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('orders/online', [OrderController::class, 'onlineOrders']);
     Route::get('orders/check-new', [OrderController::class, 'checkNewOrders']);
     Route::post('orders/check-new', [OrderController::class, 'checkNewOrders']);
+    Route::match(['put', 'patch', 'post'], 'orders/{order}/status', [OrderController::class, 'updateStatus']);
+
+    // Kitchen product assignment
+    Route::get('kitchen-products/unassigned', [KitchenProductController::class, 'unassigned']);
+    Route::get('kitchen-products/{kitchen}', [KitchenProductController::class, 'kitchenProducts']);
+    Route::get('kitchen-products', [KitchenProductController::class, 'kitchenProducts']);
+    Route::match(['put', 'post'], 'kitchen-products/assign', [KitchenProductController::class, 'assign']);
 
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::get('dashboard/statistics', [DashboardController::class, 'statistics']);
@@ -232,4 +241,14 @@ Route::prefix('user')->group(function () {
 
     Route::post('orders/checkout', [UserOrderController::class, 'checkout']);
     Route::get('orders/{order}', [UserOrderController::class, 'show']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Kitchen Protected Routes (role = kitchen)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->group(function () {
+    Route::get('orders', [KitchenOrderController::class, 'index']);
+    Route::match(['put', 'post'], 'orders/{kitchenOrder}/done', [KitchenOrderController::class, 'markDone']);
 });
