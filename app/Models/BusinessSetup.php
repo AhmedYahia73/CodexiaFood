@@ -24,6 +24,7 @@ class BusinessSetup extends Model
         'branch_cover',
         'start_day',
         'end_day',
+        'table_order_url',
     ];
 
     protected $attributes = [

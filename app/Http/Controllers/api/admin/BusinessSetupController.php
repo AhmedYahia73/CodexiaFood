@@ -50,6 +50,7 @@ class BusinessSetupController extends Controller
             'logo' => $request->hasFile('logo')
                 ? 'required|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
                 : 'required|string|max:255',
+            'table_order_url' => 'required|string|max:255',
         ]);
 
         $logoPath = null;
@@ -76,6 +77,7 @@ class BusinessSetupController extends Controller
             'whats' => $validated['whats'],
             'description' => $validated['description'],
             'branch_cover' => $validated['branch_cover'] ?? ($setup?->branch_cover ?? 5.00),
+            'table_order_url' => $validated['table_order_url'] ?? ($setup?->table_order_url ?? null),
         ];
 
         if (array_key_exists('start_day', $validated)) {

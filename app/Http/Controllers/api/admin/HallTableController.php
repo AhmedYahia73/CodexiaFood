@@ -7,6 +7,7 @@ use App\Http\Resources\HallTableResource;
 use App\Models\Branch;
 use App\Models\Hall;
 use App\Models\HallTable;
+use App\Models\BusinessSetup;
 use App\Services\QrCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,10 +48,10 @@ class HallTableController extends Controller
             'name' => 'required|string|max:255',
             'branch_id' => 'required|exists:branches,id',
             'hall_id' => 'required|exists:halls,id',
-            'status' => 'required|boolean',
-            'base_url' => 'required|string|max:255',
+            'status' => 'required|boolean', 
         ]);
 
+        $validated['base_url'] = BusinessSetup::first()?->table_order_url ?? $request->get('base_url', '');
         $hallTable = HallTable::create($validated);
         $this->qrCodeService->generateForTable($hallTable, $request);
 

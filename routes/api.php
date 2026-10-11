@@ -31,6 +31,23 @@ use App\Http\Controllers\api\admin\SupplierController;
 use App\Http\Controllers\api\admin\TaxController;
 use App\Http\Controllers\api\admin\WasteController;
 use App\Http\Controllers\api\AuthController;
+use App\Http\Controllers\api\branch\CashierController as BranchCashierController;
+use App\Http\Controllers\api\branch\CashierManController as BranchCashierManController;
+use App\Http\Controllers\api\branch\DashboardController as BranchDashboardController;
+use App\Http\Controllers\api\branch\DeliveryController as BranchDeliveryController;
+use App\Http\Controllers\api\branch\FinancialAccountController as BranchFinancialAccountController;
+use App\Http\Controllers\api\branch\HallController as BranchHallController;
+use App\Http\Controllers\api\branch\HallTableController as BranchHallTableController;
+use App\Http\Controllers\api\branch\InventoryMaterialController as BranchInventoryMaterialController;
+use App\Http\Controllers\api\branch\InventoryRecipeController as BranchInventoryRecipeController;
+use App\Http\Controllers\api\branch\KitchenController as BranchKitchenController;
+use App\Http\Controllers\api\branch\KitchenProductController as BranchKitchenProductController;
+use App\Http\Controllers\api\branch\ManufactringController as BranchManufactringController;
+use App\Http\Controllers\api\branch\OrderController as BranchOrderController;
+use App\Http\Controllers\api\branch\PurchaseController as BranchPurchaseController;
+use App\Http\Controllers\api\branch\ReportController as BranchReportController;
+use App\Http\Controllers\api\branch\ShiftController as BranchShiftController;
+use App\Http\Controllers\api\branch\WasteController as BranchWasteController;
 use App\Http\Controllers\api\cashier\CashierCartController;
 use App\Http\Controllers\api\cashier\CashierHomeController;
 use App\Http\Controllers\api\cashier\CashierOrderController;
@@ -164,6 +181,89 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
         Route::put('{inventory}/status', [InventoryMaterialController::class, 'changeStatus']);
     });
     Route::put('inventory/material-items/{item}', [InventoryMaterialController::class, 'updateItem']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Branch Protected CRUD Routes (role = branch)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:branch', 'role:branch'])->prefix('branch')->group(function () {
+    // Select options endpoints for frontend dropdowns
+    Route::get('cashier-men/select-options', [BranchCashierManController::class, 'selectOptions']);
+    Route::get('cashiers/select-options', [BranchCashierController::class, 'selectOptions']);
+    Route::get('deliveries/select-options', [BranchDeliveryController::class, 'selectOptions']);
+    Route::get('financial-accounts/select-options', [BranchFinancialAccountController::class, 'selectOptions']);
+    Route::get('halls/select-options', [BranchHallController::class, 'selectOptions']);
+    Route::get('hall-tables/select-options', [BranchHallTableController::class, 'selectOptions']);
+    Route::get('kitchens/select-options', [BranchKitchenController::class, 'selectOptions']);
+    Route::get('orders/select-options', [BranchOrderController::class, 'selectOptions']);
+    Route::get('shifts/select-options', [BranchShiftController::class, 'selectOptions']);
+    Route::get('wastes/select-options', [BranchWasteController::class, 'selectOptions']);
+    Route::get('purchases/select-options', [BranchPurchaseController::class, 'selectOptions']);
+    Route::get('manufacturing/select-options', [BranchManufactringController::class, 'selectOptions']);
+    Route::get('manufacturing/specifications', [BranchManufactringController::class, 'getSpecification']);
+    Route::get('reports/start-shifts/select-options', [BranchReportController::class, 'selectOptions']);
+    Route::get('reports/start-shifts/lists', [BranchReportController::class, 'selectOptions']);
+    Route::get('start-shifts/select-options', [BranchReportController::class, 'selectOptions']);
+    Route::get('start-shifts/lists', [BranchReportController::class, 'selectOptions']);
+    Route::get('reports/start-shifts', [BranchReportController::class, 'startShiftReport']);
+    Route::get('start-shifts/report', [BranchReportController::class, 'startShiftReport']);
+
+    Route::get('orders/pos', [BranchOrderController::class, 'posOrders']);
+    Route::get('orders/online', [BranchOrderController::class, 'onlineOrders']);
+    Route::get('orders/check-new', [BranchOrderController::class, 'checkNewOrders']);
+    Route::post('orders/check-new', [BranchOrderController::class, 'checkNewOrders']);
+    Route::match(['put', 'patch', 'post'], 'orders/{order}/status', [BranchOrderController::class, 'updateStatus']);
+
+    // Kitchen product assignment
+    Route::get('kitchen-products/unassigned', [BranchKitchenProductController::class, 'unassigned']);
+    Route::get('kitchen-products/{kitchen}', [BranchKitchenProductController::class, 'kitchenProducts']);
+    Route::get('kitchen-products', [BranchKitchenProductController::class, 'kitchenProducts']);
+    Route::match(['put', 'post'], 'kitchen-products/assign', [BranchKitchenProductController::class, 'assign']);
+
+    Route::get('dashboard', [BranchDashboardController::class, 'index']);
+    Route::get('dashboard/statistics', [BranchDashboardController::class, 'statistics']);
+
+    Route::apiResource('cashier-men', BranchCashierManController::class);
+    Route::apiResource('cashiers', BranchCashierController::class);
+    Route::apiResource('deliveries', BranchDeliveryController::class);
+    Route::apiResource('financial-accounts', BranchFinancialAccountController::class);
+    Route::apiResource('halls', BranchHallController::class);
+    Route::apiResource('hall-tables', BranchHallTableController::class);
+    Route::apiResource('kitchens', BranchKitchenController::class);
+    Route::apiResource('orders', BranchOrderController::class);
+    Route::apiResource('purchases', BranchPurchaseController::class);
+    Route::apiResource('shifts', BranchShiftController::class);
+    Route::apiResource('wastes', BranchWasteController::class);
+
+    Route::get('manufacturing', [BranchManufactringController::class, 'index']);
+    Route::post('manufacturing', [BranchManufactringController::class, 'manufacture']);
+    Route::get('manufacturing/{manufacturingList}', [BranchManufactringController::class, 'show']);
+
+    // Inventory routes for Product Recipes
+    Route::prefix('inventory/recipes')->group(function () {
+        Route::get('select-options', [BranchInventoryRecipeController::class, 'selectOptions']);
+        Route::get('pending', [BranchInventoryRecipeController::class, 'pending']);
+        Route::get('history', [BranchInventoryRecipeController::class, 'history']);
+        Route::post('/', [BranchInventoryRecipeController::class, 'store']);
+        Route::get('{inventory}', [BranchInventoryRecipeController::class, 'show']);
+        Route::put('{inventory}/items', [BranchInventoryRecipeController::class, 'updateActualStocks']);
+        Route::put('{inventory}/status', [BranchInventoryRecipeController::class, 'changeStatus']);
+    });
+    Route::put('inventory/recipe-items/{item}', [BranchInventoryRecipeController::class, 'updateItem']);
+
+    // Inventory routes for Materials
+    Route::prefix('inventory/materials')->group(function () {
+        Route::get('select-options', [BranchInventoryMaterialController::class, 'selectOptions']);
+        Route::get('pending', [BranchInventoryMaterialController::class, 'pending']);
+        Route::get('history', [BranchInventoryMaterialController::class, 'history']);
+        Route::post('/', [BranchInventoryMaterialController::class, 'store']);
+        Route::get('{inventory}', [BranchInventoryMaterialController::class, 'show']);
+        Route::put('{inventory}/items', [BranchInventoryMaterialController::class, 'updateActualStocks']);
+        Route::put('{inventory}/status', [BranchInventoryMaterialController::class, 'changeStatus']);
+    });
+    Route::put('inventory/material-items/{item}', [BranchInventoryMaterialController::class, 'updateItem']);
 });
 
 /*
