@@ -80,6 +80,7 @@ class PurchaseController extends Controller
         $validated = $request->validate([
             'branch_id' => 'required|integer|exists:branches,id',
             'supplier_id' => 'nullable|integer|exists:suppliers,id',
+            'total_cost' => 'nullable|numeric|min:0',
             'paid_amount' => 'nullable|numeric|min:0',
             'due_date' => 'nullable|date',
             'date' => 'nullable|date',
@@ -116,14 +117,20 @@ class PurchaseController extends Controller
 
         // 5. Create Purchase, PurchaseItems, dues, and increment stocks inside a DB transaction
         $purchase = DB::transaction(function () use ($validated, $receiptPath) {
-            $totalCost = 0;
+            $calculatedTotalCost = 0;
             $totalQuantity = 0;
             $branchId = (int) $validated['branch_id'];
 
             foreach ($validated['items'] as $itemData) {
-                $totalCost += (float) $itemData['cost'];
-                $totalQuantity += (float) $itemData['quantity'];
+                $qty = (float) $itemData['quantity'];
+                $itemCost = (float) $itemData['cost'];
+                $totalQuantity += $qty;
+                $calculatedTotalCost += ($qty * $itemCost);
             }
+
+            $totalCost = ! empty($validated['total_cost']) && (float) $validated['total_cost'] > 0
+                ? (float) $validated['total_cost']
+                : $calculatedTotalCost;
 
             $paidAmount = isset($validated['paid_amount'])
                 ? min($totalCost, max(0.0, (float) $validated['paid_amount']))
@@ -156,6 +163,10 @@ class PurchaseController extends Controller
                         ['stock' => 0]
                     );
                     $matStock->increment('stock', $qty);
+
+                    if (Schema::hasColumn('materials', 'stock')) {
+                        Material::where('id', $materialId)->increment('stock', $qty);
+                    }
                 }
 
                 // Increment ProductRecipe stock for this branch by this item's quantity
@@ -165,6 +176,10 @@ class PurchaseController extends Controller
                         ['stock' => 0]
                     );
                     $recStock->increment('stock', $qty);
+
+                    if (Schema::hasColumn('product_recipes', 'stock')) {
+                        ProductRecipe::where('id', $recipeId)->increment('stock', $qty);
+                    }
                 }
 
                 // Create PurchaseItem
@@ -244,6 +259,10 @@ class PurchaseController extends Controller
                         ->lockForUpdate()
                         ->first();
                     $matStock?->decrement('stock', $item->quantity);
+
+                    if (Schema::hasColumn('materials', 'stock')) {
+                        Material::where('id', $item->material_id)->decrement('stock', $item->quantity);
+                    }
                 }
 
                 if ($item->product_recipe_id && $purchase->branch_id) {
@@ -252,6 +271,10 @@ class PurchaseController extends Controller
                         ->lockForUpdate()
                         ->first();
                     $recStock?->decrement('stock', $item->quantity);
+
+                    if (Schema::hasColumn('product_recipes', 'stock')) {
+                        ProductRecipe::where('id', $item->product_recipe_id)->decrement('stock', $item->quantity);
+                    }
                 }
             }
 

@@ -89,6 +89,7 @@ class SaleController extends Controller
         $validated = $request->validate([
             'branch_id' => 'required|integer|exists:branches,id',
             'saler_id' => 'nullable|integer|exists:salers,id',
+            'total_cost' => 'nullable|numeric|min:0',
             'paid_amount' => 'nullable|numeric|min:0',
             'due_date' => 'nullable|date',
             'date' => 'nullable|date',
@@ -255,13 +256,19 @@ class SaleController extends Controller
 
         // 4. Create Sale and deduct stocks inside DB Transaction
         $sale = DB::transaction(function () use ($validated, $branchId, $withoutRecipe, $receiptPath) {
-            $totalCost = 0;
+            $calculatedTotalCost = 0;
             $totalQuantity = 0;
 
             foreach ($validated['items'] as $itemData) {
-                $totalCost += (float) $itemData['cost'];
-                $totalQuantity += (float) $itemData['quantity'];
+                $qty = (float) $itemData['quantity'];
+                $itemCost = (float) $itemData['cost'];
+                $totalQuantity += $qty;
+                $calculatedTotalCost += ($qty * $itemCost);
             }
+
+            $totalCost = ! empty($validated['total_cost']) && (float) $validated['total_cost'] > 0
+                ? (float) $validated['total_cost']
+                : $calculatedTotalCost;
 
             $paidAmount = isset($validated['paid_amount'])
                 ? min($totalCost, max(0.0, (float) $validated['paid_amount']))
@@ -326,6 +333,10 @@ class SaleController extends Controller
 
                                     if ($deduct > 0) {
                                         $matStock->decrement('stock', $deduct);
+
+                                        if (Schema::hasColumn('materials', 'stock')) {
+                                            Material::where('id', $recipeItem->material_id)->decrement('stock', $deduct);
+                                        }
                                     }
                                 }
                             } elseif (! empty($recipeItem->product_recipe_id)) {
@@ -342,6 +353,10 @@ class SaleController extends Controller
 
                                     if ($deduct > 0) {
                                         $recStock->decrement('stock', $deduct);
+
+                                        if (Schema::hasColumn('product_recipes', 'stock')) {
+                                            ProductRecipe::where('id', $recipeItem->product_recipe_id)->decrement('stock', $deduct);
+                                        }
                                     }
                                 }
                             }
@@ -364,6 +379,10 @@ class SaleController extends Controller
 
                         if ($deduct > 0) {
                             $matStock->decrement('stock', $deduct);
+
+                            if (Schema::hasColumn('materials', 'stock')) {
+                                Material::where('id', $materialId)->decrement('stock', $deduct);
+                            }
                         }
                     }
                 }
@@ -383,6 +402,10 @@ class SaleController extends Controller
 
                         if ($deduct > 0) {
                             $recStock->decrement('stock', $deduct);
+
+                            if (Schema::hasColumn('product_recipes', 'stock')) {
+                                ProductRecipe::where('id', $recipeId)->decrement('stock', $deduct);
+                            }
                         }
                     }
                 }
@@ -490,12 +513,20 @@ class SaleController extends Controller
                                     ->lockForUpdate()
                                     ->first();
                                 $matStock?->increment('stock', $requiredQty);
+
+                                if (Schema::hasColumn('materials', 'stock')) {
+                                    Material::where('id', $recipeItem->material_id)->increment('stock', $requiredQty);
+                                }
                             } elseif (! empty($recipeItem->product_recipe_id)) {
                                 $recStock = ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
                                     ->where('branch_id', $branchId)
                                     ->lockForUpdate()
                                     ->first();
                                 $recStock?->increment('stock', $requiredQty);
+
+                                if (Schema::hasColumn('product_recipes', 'stock')) {
+                                    ProductRecipe::where('id', $recipeItem->product_recipe_id)->increment('stock', $requiredQty);
+                                }
                             }
                         }
                     }
@@ -508,6 +539,10 @@ class SaleController extends Controller
                         ->lockForUpdate()
                         ->first();
                     $matStock?->increment('stock', $qty);
+
+                    if (Schema::hasColumn('materials', 'stock')) {
+                        Material::where('id', $item->material_id)->increment('stock', $qty);
+                    }
                 }
 
                 // Restore recipe
@@ -517,6 +552,10 @@ class SaleController extends Controller
                         ->lockForUpdate()
                         ->first();
                     $recStock?->increment('stock', $qty);
+
+                    if (Schema::hasColumn('product_recipes', 'stock')) {
+                        ProductRecipe::where('id', $item->product_recipe_id)->increment('stock', $qty);
+                    }
                 }
             }
 

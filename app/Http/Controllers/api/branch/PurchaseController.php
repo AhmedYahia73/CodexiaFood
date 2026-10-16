@@ -116,6 +116,10 @@ class PurchaseController extends BaseBranchController
                         ['stock' => 0]
                     );
                     $matStock->increment('stock', $qty);
+
+                    if (Schema::hasColumn('materials', 'stock')) {
+                        Material::where('id', $materialId)->increment('stock', $qty);
+                    }
                 }
 
                 if ($recipeId) {
@@ -124,6 +128,10 @@ class PurchaseController extends BaseBranchController
                         ['stock' => 0]
                     );
                     $recStock->increment('stock', $qty);
+
+                    if (Schema::hasColumn('product_recipes', 'stock')) {
+                        ProductRecipe::where('id', $recipeId)->increment('stock', $qty);
+                    }
                 }
 
                 $purchase->items()->create([
@@ -133,7 +141,7 @@ class PurchaseController extends BaseBranchController
                     'cost' => $itemCost,
                 ]);
 
-                $totalCost += $itemCost;
+                $totalCost += ($qty * $itemCost);
                 $totalQuantity += $qty;
             }
 
@@ -179,6 +187,10 @@ class PurchaseController extends BaseBranchController
                         ->lockForUpdate()
                         ->first();
                     $matStock?->decrement('stock', $item->quantity);
+
+                    if (Schema::hasColumn('materials', 'stock')) {
+                        Material::where('id', $item->material_id)->decrement('stock', $item->quantity);
+                    }
                 }
 
                 if ($item->product_recipe_id) {
@@ -187,6 +199,10 @@ class PurchaseController extends BaseBranchController
                         ->lockForUpdate()
                         ->first();
                     $recStock?->decrement('stock', $item->quantity);
+
+                    if (Schema::hasColumn('product_recipes', 'stock')) {
+                        ProductRecipe::where('id', $item->product_recipe_id)->decrement('stock', $item->quantity);
+                    }
                 }
             }
 

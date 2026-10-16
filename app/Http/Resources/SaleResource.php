@@ -15,7 +15,7 @@ class SaleResource extends JsonResource
     public function toArray(Request $request): array
     {
         $items = $this->items ?? collect();
-        $totalCost = (float) ($this->total_cost ?? $items->sum('cost'));
+        $totalCost = (float) ($this->total_cost ?? $items->sum(fn ($i) => (float) $i->quantity * (float) $i->cost));
         $totalQuantity = (float) ($this->total_quantity ?? $items->sum('quantity'));
 
         return [
