@@ -85,6 +85,10 @@ class PurchaseController extends Controller
             'date' => 'nullable|date',
             'receipt' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'notes' => 'nullable|string',
+            'dues' => 'nullable|array',
+            'dues.*.amount' => 'required_with:dues|numeric|min:0.01',
+            'dues.*.date' => 'required_with:dues|date',
+            'dues.*.notes' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.material_id' => 'nullable|integer|exists:materials,id',
             'items.*.product_recipe_id' => 'nullable|integer|exists:product_recipes,id',
@@ -174,15 +178,29 @@ class PurchaseController extends Controller
 
             // Create deferred due record and increment supplier balance if remaining > 0
             if ($remainingAmount > 0) {
-                $dueDate = ! empty($validated['due_date'])
-                    ? $validated['due_date']
-                    : (! empty($validated['date']) ? $validated['date'] : now()->addMonth()->format('Y-m-d'));
+                if (! empty($validated['dues']) && is_array($validated['dues'])) {
+                    foreach ($validated['dues'] as $dueItem) {
+                        $dueAmount = (float) ($dueItem['amount'] ?? 0);
+                        if ($dueAmount <= 0) {
+                            continue;
+                        }
+                        $purchase->dues()->create([
+                            'amount' => $dueAmount,
+                            'date' => ! empty($dueItem['date']) ? $dueItem['date'] : now()->addMonth()->format('Y-m-d'),
+                            'notes' => $dueItem['notes'] ?? ($validated['notes'] ?? null),
+                        ]);
+                    }
+                } else {
+                    $dueDate = ! empty($validated['due_date'])
+                        ? $validated['due_date']
+                        : (! empty($validated['date']) ? $validated['date'] : now()->addMonth()->format('Y-m-d'));
 
-                $purchase->dues()->create([
-                    'amount' => $remainingAmount,
-                    'date' => $dueDate,
-                    'notes' => $validated['notes'] ?? null,
-                ]);
+                    $purchase->dues()->create([
+                        'amount' => $remainingAmount,
+                        'date' => $dueDate,
+                        'notes' => $validated['notes'] ?? null,
+                    ]);
+                }
 
                 if ($purchase->supplier_id) {
                     Supplier::where('id', $purchase->supplier_id)->increment('balance', $remainingAmount);
@@ -343,6 +361,13 @@ class PurchaseController extends Controller
                     ],
                 ],
             ]);
+        }
+
+        if ($request->has('dues') && is_string($request->input('dues'))) {
+            $decodedDues = json_decode($request->input('dues'), true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedDues)) {
+                $request->merge(['dues' => $decodedDues]);
+            }
         }
     }
 }

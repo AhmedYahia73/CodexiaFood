@@ -117,3 +117,62 @@ test('creating purchase with full payment does not create dues and does not chan
         'purchase_id' => $purchaseId,
     ]);
 });
+
+test('creating purchase with multiple installment dues creates multiple purchase_dues records', function () {
+    $payload = [
+        'branch_id' => $this->branch->id,
+        'supplier_id' => $this->supplier->id,
+        'paid_amount' => 400.00,
+        'notes' => 'شراء على 3 أقساط',
+        'dues' => [
+            ['amount' => 200.00, 'date' => '2026-11-01', 'notes' => 'القسط الأول'],
+            ['amount' => 200.00, 'date' => '2026-12-01', 'notes' => 'القسط الثاني'],
+            ['amount' => 200.00, 'date' => '2027-01-01', 'notes' => 'القسط الثالث'],
+        ],
+        'items' => [
+            [
+                'material_id' => $this->material->id,
+                'quantity' => 10,
+                'cost' => 1000.00,
+            ],
+        ],
+    ];
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/purchases', $payload);
+
+    $response->assertStatus(201)
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('data.total_cost', 1000)
+        ->assertJsonPath('data.paid_amount', 400)
+        ->assertJsonPath('data.remaining_amount', 600)
+        ->assertJsonCount(3, 'data.dues');
+
+    $purchaseId = $response->json('data.id');
+
+    // Supplier balance incremented by remaining_amount (1000 + 600 = 1600)
+    $this->supplier->refresh();
+    expect((float) $this->supplier->balance)->toBe(1600.00);
+
+    $this->assertDatabaseCount('purchase_dues', 3);
+    $this->assertDatabaseHas('purchase_dues', [
+        'purchase_id' => $purchaseId,
+        'amount' => 200.00,
+        'notes' => 'القسط الأول',
+    ]);
+    $this->assertDatabaseHas('purchase_dues', [
+        'purchase_id' => $purchaseId,
+        'amount' => 200.00,
+        'notes' => 'القسط الثاني',
+    ]);
+    $this->assertDatabaseHas('purchase_dues', [
+        'purchase_id' => $purchaseId,
+        'amount' => 200.00,
+        'notes' => 'القسط الثالث',
+    ]);
+
+    $purchase = Purchase::with('dues')->find($purchaseId);
+    expect($purchase->dues[0]->date->format('Y-m-d'))->toBe('2026-11-01')
+        ->and($purchase->dues[1]->date->format('Y-m-d'))->toBe('2026-12-01')
+        ->and($purchase->dues[2]->date->format('Y-m-d'))->toBe('2027-01-01');
+});

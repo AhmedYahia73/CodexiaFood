@@ -95,6 +95,10 @@ class SaleController extends Controller
             'receipt' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'notes' => 'nullable|string',
             'without_recipe' => 'sometimes|nullable|boolean',
+            'dues' => 'nullable|array',
+            'dues.*.amount' => 'required_with:dues|numeric|min:0.01',
+            'dues.*.date' => 'required_with:dues|date',
+            'dues.*.notes' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'nullable|integer|exists:products,id',
             'items.*.material_id' => 'nullable|integer|exists:materials,id',
@@ -386,15 +390,29 @@ class SaleController extends Controller
 
             // Record dues and update Saler balance if remaining amount > 0
             if ($remainingAmount > 0) {
-                $dueDate = ! empty($validated['due_date'])
-                    ? $validated['due_date']
-                    : (! empty($validated['date']) ? $validated['date'] : now()->addMonth()->format('Y-m-d'));
+                if (! empty($validated['dues']) && is_array($validated['dues'])) {
+                    foreach ($validated['dues'] as $dueItem) {
+                        $dueAmount = (float) ($dueItem['amount'] ?? 0);
+                        if ($dueAmount <= 0) {
+                            continue;
+                        }
+                        $sale->dues()->create([
+                            'amount' => $dueAmount,
+                            'date' => ! empty($dueItem['date']) ? $dueItem['date'] : now()->addMonth()->format('Y-m-d'),
+                            'notes' => $dueItem['notes'] ?? ($validated['notes'] ?? null),
+                        ]);
+                    }
+                } else {
+                    $dueDate = ! empty($validated['due_date'])
+                        ? $validated['due_date']
+                        : (! empty($validated['date']) ? $validated['date'] : now()->addMonth()->format('Y-m-d'));
 
-                $sale->dues()->create([
-                    'amount' => $remainingAmount,
-                    'date' => $dueDate,
-                    'notes' => $validated['notes'] ?? null,
-                ]);
+                    $sale->dues()->create([
+                        'amount' => $remainingAmount,
+                        'date' => $dueDate,
+                        'notes' => $validated['notes'] ?? null,
+                    ]);
+                }
 
                 if ($sale->saler_id) {
                     Saler::where('id', $sale->saler_id)->increment('balance', $remainingAmount);
@@ -607,6 +625,13 @@ class SaleController extends Controller
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                     $request->merge(['items' => $decoded]);
                 }
+            }
+        }
+
+        if ($request->has('dues') && is_string($request->input('dues'))) {
+            $decodedDues = json_decode($request->input('dues'), true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedDues)) {
+                $request->merge(['dues' => $decodedDues]);
             }
         }
     }

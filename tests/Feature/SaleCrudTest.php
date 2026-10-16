@@ -263,3 +263,62 @@ test('insufficient recipe component stock returns 422 with can_bypass: true', fu
     // Stock should be 0 (consumed 3 available), NOT negative!
     expect((float) MaterialStock::where('material_id', $material->id)->where('branch_id', $this->branch->id)->value('stock'))->toBe(0.0);
 });
+
+test('creating sale with multiple installment dues creates multiple sale_dues records', function () {
+    $material = Material::create(['name' => ['ar' => 'سكر', 'en' => 'Sugar']]);
+    MaterialStock::create([
+        'material_id' => $material->id,
+        'branch_id' => $this->branch->id,
+        'stock' => 50,
+    ]);
+
+    $payload = [
+        'branch_id' => $this->branch->id,
+        'saler_id' => $this->saler->id,
+        'paid_amount' => 100.00,
+        'notes' => 'بيع سكر مع أقساط',
+        'dues' => [
+            ['amount' => 150.00, 'date' => '2026-11-10', 'notes' => 'دفعة أولى'],
+            ['amount' => 150.00, 'date' => '2026-12-10', 'notes' => 'دفعة ثانية'],
+        ],
+        'items' => [
+            [
+                'material_id' => $material->id,
+                'quantity' => 20,
+                'cost' => 400.00,
+            ],
+        ],
+    ];
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/sales', $payload);
+
+    $response->assertStatus(201)
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('data.total_cost', 400)
+        ->assertJsonPath('data.paid_amount', 100)
+        ->assertJsonPath('data.remaining_amount', 300)
+        ->assertJsonCount(2, 'data.dues');
+
+    $saleId = $response->json('data.id');
+
+    // Saler balance incremented by remaining_amount (500 + 300 = 800)
+    $this->saler->refresh();
+    expect((float) $this->saler->balance)->toBe(800.00);
+
+    $this->assertDatabaseCount('sale_dues', 2);
+    $this->assertDatabaseHas('sale_dues', [
+        'sale_id' => $saleId,
+        'amount' => 150.00,
+        'notes' => 'دفعة أولى',
+    ]);
+    $this->assertDatabaseHas('sale_dues', [
+        'sale_id' => $saleId,
+        'amount' => 150.00,
+        'notes' => 'دفعة ثانية',
+    ]);
+
+    $sale = Sale::with('dues')->find($saleId);
+    expect($sale->dues[0]->date->format('Y-m-d'))->toBe('2026-11-10')
+        ->and($sale->dues[1]->date->format('Y-m-d'))->toBe('2026-12-10');
+});
