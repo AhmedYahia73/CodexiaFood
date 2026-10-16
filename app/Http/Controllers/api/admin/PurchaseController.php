@@ -50,7 +50,7 @@ class PurchaseController extends Controller
         $perPage = (int) $request->get('per_page', 15);
         $page = (int) $request->get('page', 1);
 
-        $query = Purchase::with(['branch', 'supplier', 'items.material', 'items.productRecipe'])->latest();
+        $query = Purchase::with(['branch', 'supplier', 'items.material', 'items.productRecipe', 'dues'])->latest();
 
         if ($request->filled('branch_id')) {
             $query->where('branch_id', $request->branch_id);
@@ -80,6 +80,9 @@ class PurchaseController extends Controller
         $validated = $request->validate([
             'branch_id' => 'required|integer|exists:branches,id',
             'supplier_id' => 'nullable|integer|exists:suppliers,id',
+            'paid_amount' => 'nullable|numeric|min:0',
+            'due_date' => 'nullable|date',
+            'date' => 'nullable|date',
             'receipt' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'notes' => 'nullable|string',
             'items' => 'required|array|min:1',
@@ -107,19 +110,33 @@ class PurchaseController extends Controller
             $receiptPath = $request->input('receipt');
         }
 
-        // 5. Create Purchase, PurchaseItems, and increment stocks inside a DB transaction
+        // 5. Create Purchase, PurchaseItems, dues, and increment stocks inside a DB transaction
         $purchase = DB::transaction(function () use ($validated, $receiptPath) {
             $totalCost = 0;
             $totalQuantity = 0;
             $branchId = (int) $validated['branch_id'];
+
+            foreach ($validated['items'] as $itemData) {
+                $totalCost += (float) $itemData['cost'];
+                $totalQuantity += (float) $itemData['quantity'];
+            }
+
+            $paidAmount = isset($validated['paid_amount'])
+                ? min($totalCost, max(0.0, (float) $validated['paid_amount']))
+                : $totalCost;
+            $remainingAmount = max(0.0, $totalCost - $paidAmount);
 
             $purchase = Purchase::create([
                 'branch_id' => $branchId,
                 'supplier_id' => ! empty($validated['supplier_id']) ? (int) $validated['supplier_id'] : null,
                 'receipt' => $receiptPath,
                 'notes' => $validated['notes'] ?? null,
-                'total_cost' => 0,
-                'total_quantity' => 0,
+                'total_cost' => $totalCost,
+                'paid_amount' => $paidAmount,
+                'remaining_amount' => $remainingAmount,
+                'total_quantity' => $totalQuantity,
+                'cost' => $totalCost,
+                'quantity' => $totalQuantity,
             ]);
 
             foreach ($validated['items'] as $itemData) {
@@ -153,17 +170,24 @@ class PurchaseController extends Controller
                     'quantity' => $qty,
                     'cost' => $itemCost,
                 ]);
-
-                $totalCost += $itemCost;
-                $totalQuantity += $qty;
             }
 
-            $purchase->update([
-                'total_cost' => $totalCost,
-                'total_quantity' => $totalQuantity,
-                'cost' => $totalCost,
-                'quantity' => $totalQuantity,
-            ]);
+            // Create deferred due record and increment supplier balance if remaining > 0
+            if ($remainingAmount > 0) {
+                $dueDate = ! empty($validated['due_date'])
+                    ? $validated['due_date']
+                    : (! empty($validated['date']) ? $validated['date'] : now()->addMonth()->format('Y-m-d'));
+
+                $purchase->dues()->create([
+                    'amount' => $remainingAmount,
+                    'date' => $dueDate,
+                    'notes' => $validated['notes'] ?? null,
+                ]);
+
+                if ($purchase->supplier_id) {
+                    Supplier::where('id', $purchase->supplier_id)->increment('balance', $remainingAmount);
+                }
+            }
 
             return $purchase;
         });
@@ -171,7 +195,7 @@ class PurchaseController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Purchase created successfully.',
-            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe'])),
+            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe', 'dues'])),
         ], 201);
     }
 
@@ -182,7 +206,7 @@ class PurchaseController extends Controller
     {
         return response()->json([
             'status' => true,
-            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe'])),
+            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe', 'dues'])),
         ]);
     }
 
@@ -211,6 +235,11 @@ class PurchaseController extends Controller
                         ->first();
                     $recStock?->decrement('stock', $item->quantity);
                 }
+            }
+
+            // Reverse supplier balance if there was a deferred remaining amount
+            if ($purchase->supplier_id && (float) $purchase->remaining_amount > 0) {
+                Supplier::where('id', $purchase->supplier_id)->decrement('balance', (float) $purchase->remaining_amount);
             }
 
             if ($purchase->receipt) {

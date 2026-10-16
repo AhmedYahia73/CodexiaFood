@@ -27,6 +27,8 @@ use App\Http\Controllers\api\admin\ProductManufactringController;
 use App\Http\Controllers\api\admin\ProductRecipeController;
 use App\Http\Controllers\api\admin\PurchaseController;
 use App\Http\Controllers\api\admin\ReportController;
+use App\Http\Controllers\api\admin\SaleController;
+use App\Http\Controllers\api\admin\SalerController;
 use App\Http\Controllers\api\admin\ShiftController;
 use App\Http\Controllers\api\admin\SupplierController;
 use App\Http\Controllers\api\admin\TaxController;
@@ -103,9 +105,11 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('products/select-options', [ProductController::class, 'selectOptions']);
     Route::get('shifts/select-options', [ShiftController::class, 'selectOptions']);
     Route::get('suppliers/select-options', [SupplierController::class, 'selectOptions']);
+    Route::get('salers/select-options', [SalerController::class, 'selectOptions']);
     Route::get('taxes/select-options', [TaxController::class, 'selectOptions']);
     Route::get('wastes/select-options', [WasteController::class, 'selectOptions']);
     Route::get('purchases/select-options', [PurchaseController::class, 'selectOptions']);
+    Route::get('sales/select-options', [SaleController::class, 'selectOptions']);
     Route::get('manufacturing/select-options', [ManufactringController::class, 'selectOptions']);
     Route::get('manufacturing/specifications', [ManufactringController::class, 'getSpecification']);
     Route::get('reports/start-shifts/select-options', [ReportController::class, 'selectOptions']);
@@ -151,8 +155,10 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('product-manufacturings', ProductManufactringController::class);
     Route::apiResource('product-recipes', ProductRecipeController::class);
     Route::apiResource('purchases', PurchaseController::class);
+    Route::apiResource('sales', SaleController::class);
     Route::apiResource('shifts', ShiftController::class);
     Route::apiResource('suppliers', SupplierController::class);
+    Route::apiResource('salers', SalerController::class);
     Route::apiResource('taxes', TaxController::class);
     Route::apiResource('wastes', WasteController::class);
 

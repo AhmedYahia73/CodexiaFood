@@ -20,6 +20,8 @@ class Purchase extends Model
         'quantity',
         'cost',
         'total_cost',
+        'paid_amount',
+        'remaining_amount',
         'total_quantity',
         'receipt',
         'notes',
@@ -35,6 +37,8 @@ class Purchase extends Model
             'quantity' => 'decimal:2',
             'cost' => 'decimal:2',
             'total_cost' => 'decimal:2',
+            'paid_amount' => 'decimal:2',
+            'remaining_amount' => 'decimal:2',
             'total_quantity' => 'decimal:2',
         ];
     }
@@ -60,6 +64,11 @@ class Purchase extends Model
     public function purchaseItems(): HasMany
     {
         return $this->items();
+    }
+
+    public function dues(): HasMany
+    {
+        return $this->hasMany(PurchaseDue::class, 'purchase_id');
     }
 
     /**
