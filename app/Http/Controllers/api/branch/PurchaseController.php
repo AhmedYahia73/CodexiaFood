@@ -9,6 +9,7 @@ use App\Models\MaterialStock;
 use App\Models\ProductRecipe;
 use App\Models\ProductRecipeStock;
 use App\Models\Purchase;
+use App\Models\Supplier;
 use App\trait\image;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,7 +44,7 @@ class PurchaseController extends BaseBranchController
         $perPage = (int) $request->get('per_page', 15);
         $page = (int) $request->get('page', 1);
 
-        $query = Purchase::with(['branch', 'items.material', 'items.productRecipe'])
+        $query = Purchase::with(['branch', 'supplier', 'items.material', 'items.productRecipe'])
             ->where('branch_id', $branchId)
             ->latest();
 
@@ -53,7 +54,6 @@ class PurchaseController extends BaseBranchController
 
         return PurchaseResource::collection($purchases)->additional([
             'status' => true,
-            'select_options' => $this->getSelectOptionsData($request),
         ]);
     }
 
@@ -65,6 +65,7 @@ class PurchaseController extends BaseBranchController
 
         $validated = $request->validate([
             'branch_id' => 'sometimes|nullable|integer',
+            'supplier_id' => 'nullable|integer|exists:suppliers,id',
             'receipt' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'notes' => 'nullable|string',
             'items' => 'required|array|min:1',
@@ -96,6 +97,7 @@ class PurchaseController extends BaseBranchController
 
             $purchase = Purchase::create([
                 'branch_id' => $branchId,
+                'supplier_id' => $validated['supplier_id'] ?? null,
                 'receipt' => $receiptPath,
                 'notes' => $validated['notes'] ?? null,
                 'total_cost' => 0,
@@ -148,8 +150,7 @@ class PurchaseController extends BaseBranchController
         return response()->json([
             'status' => true,
             'message' => 'Purchase created successfully.',
-            'data' => new PurchaseResource($purchase->load(['items.material', 'items.productRecipe'])),
-            'select_options' => $this->getSelectOptionsData($request),
+            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe'])),
         ], 201);
     }
 
@@ -159,7 +160,7 @@ class PurchaseController extends BaseBranchController
 
         return response()->json([
             'status' => true,
-            'data' => new PurchaseResource($purchase->load(['items.material', 'items.productRecipe'])),
+            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe'])),
         ]);
     }
 
@@ -237,6 +238,15 @@ class PurchaseController extends BaseBranchController
                 ];
             });
 
+        $suppliers = Supplier::select('id', 'name')->get()->map(function ($supplier) use ($locale) {
+            return [
+                'id' => $supplier->id,
+                'name' => is_array($supplier->name)
+                    ? ($supplier->name[$locale] ?? $supplier->name['ar'] ?? $supplier->name['en'] ?? '')
+                    : $supplier->name,
+            ];
+        });
+
         $branches = Branch::where('id', $branchId)->select('id', 'name')->get()->map(function ($branch) use ($locale) {
             return [
                 'id' => $branch->id,
@@ -248,6 +258,7 @@ class PurchaseController extends BaseBranchController
 
         return [
             'branches' => $branches,
+            'suppliers' => $suppliers,
             'materials' => $materials,
             'product_recipes' => $productRecipes,
         ];

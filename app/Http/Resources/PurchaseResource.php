@@ -22,6 +22,11 @@ class PurchaseResource extends JsonResource
             'id' => $this->id,
             'branch_id' => $this->branch_id,
             'branch' => new BranchResource($this->whenLoaded('branch')),
+            'supplier_id' => $this->supplier_id,
+            'supplier' => $this->relationLoaded('supplier') && $this->supplier ? [
+                'id' => $this->supplier->id,
+                'name' => $this->supplier->name,
+            ] : null,
             'receipt' => $this->receipt,
             'receipt_url' => $this->receipt_url,
             'total_cost' => $totalCost,

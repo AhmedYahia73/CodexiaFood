@@ -103,7 +103,8 @@ class ProductManufactringController extends Controller
             $validated = $request->validate([
                 'product_id' => 'required|exists:products,id',
                 'recipes' => 'required|array|min:1',
-                'recipes.*.product_recipe_id' => 'required|exists:product_recipes,id',
+                'recipes.*.material_id' => 'nullable|exists:materials,id|required_without:recipes.*.product_recipe_id',
+                'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
                 'recipes.*.count' => 'required|integer|min:1',
             ]);
         } else {
@@ -123,8 +124,8 @@ class ProductManufactringController extends Controller
 
             foreach ($validated['recipes'] as $recipe) {
                 $spec->productRecipeManufacturings()->create([
-                    'product_recipe_id' => $isFinished ? $recipe['product_recipe_id'] : null,
-                    'material_id' => ! $isFinished ? $recipe['material_id'] : null,
+                    'product_recipe_id' => $recipe['product_recipe_id'] ?? null,
+                    'material_id' => $recipe['material_id'] ?? null,
                     'count' => $recipe['count'],
                 ]);
             }
@@ -167,14 +168,15 @@ class ProductManufactringController extends Controller
 
         if ($isFinished) {
             $validated = $request->validate([
-                'product_id' => 'required|exists:products,id',
+                'product_id' => 'sometimes|nullable|exists:products,id',
                 'recipes' => 'sometimes|required|array|min:1',
-                'recipes.*.product_recipe_id' => 'required|exists:product_recipes,id',
+                'recipes.*.material_id' => 'nullable|exists:materials,id|required_without:recipes.*.product_recipe_id',
+                'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
                 'recipes.*.count' => 'required|integer|min:1',
             ]);
         } else {
             $validated = $request->validate([
-                'product_recipe_id' => 'required|exists:product_recipes,id',
+                'product_recipe_id' => 'sometimes|nullable|exists:product_recipes,id',
                 'recipes' => 'sometimes|required|array|min:1',
                 'recipes.*.material_id' => 'required|exists:materials,id',
                 'recipes.*.count' => 'required|integer|min:1',
@@ -183,8 +185,8 @@ class ProductManufactringController extends Controller
 
         DB::transaction(function () use ($productManufacturing, $validated, $isFinished) {
             $productManufacturing->update([
-                'product_id' => $isFinished ? $validated['product_id'] : null,
-                'product_recipe_id' => ! $isFinished ? $validated['product_recipe_id'] : null,
+                'product_id' => $isFinished ? ($validated['product_id'] ?? $productManufacturing->product_id) : null,
+                'product_recipe_id' => ! $isFinished ? ($validated['product_recipe_id'] ?? $productManufacturing->product_recipe_id) : null,
             ]);
 
             if (isset($validated['recipes'])) {
@@ -192,8 +194,8 @@ class ProductManufactringController extends Controller
 
                 foreach ($validated['recipes'] as $recipe) {
                     $productManufacturing->productRecipeManufacturings()->create([
-                        'product_recipe_id' => $isFinished ? $recipe['product_recipe_id'] : null,
-                        'material_id' => ! $isFinished ? $recipe['material_id'] : null,
+                        'product_recipe_id' => $recipe['product_recipe_id'] ?? null,
+                        'material_id' => $recipe['material_id'] ?? null,
                         'count' => $recipe['count'],
                     ]);
                 }

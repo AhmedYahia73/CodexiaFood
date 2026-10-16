@@ -29,6 +29,7 @@ class Purchase extends Model
     {
         return [
             'branch_id' => 'integer',
+            'supplier_id' => 'integer',
             'material_ids' => 'array',
             'product_recipe_id' => 'array',
             'quantity' => 'decimal:2',
@@ -36,6 +37,11 @@ class Purchase extends Model
             'total_cost' => 'decimal:2',
             'total_quantity' => 'decimal:2',
         ];
+    }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
     }
 
     public function branch(): BelongsTo

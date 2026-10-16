@@ -31,6 +31,7 @@ class ManufactringController extends Controller
     public function getSpecification(Request $request): JsonResponse
     {
         $request->validate([
+            'branch_id' => 'sometimes|nullable|exists:branches,id',
             'product_id' => 'nullable|exists:products,id|required_without:product_recipe_id',
             'product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:product_id',
         ]);
