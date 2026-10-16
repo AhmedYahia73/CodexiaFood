@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\CashierResource;
 use App\Models\Branch;
 use App\Models\Cashier;
-use App\Models\CashierMan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -19,7 +18,6 @@ class CashierController extends Controller
             'status' => true,
             'data' => [
                 'branches' => Branch::select('id', 'name')->get(),
-                'cashier_men' => CashierMan::select('id', 'name')->get(),
             ],
         ]);
     }
@@ -28,19 +26,14 @@ class CashierController extends Controller
     {
         $cashiers = Cashier::with('branch')->latest()->paginate($request->get('per_page', 15));
 
-        return CashierResource::collection($cashiers)->additional([
-            'select_options' => [
-                'branches' => Branch::select('id', 'name')->get(),
-                'cashier_men' => CashierMan::select('id', 'name')->get(),
-            ],
-        ]);
+        return CashierResource::collection($cashiers);
     }
 
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'cashier_man_id' => 'nullable|exists:cashier_men,id',
+            'cashier_man_id' => 'sometimes|nullable|exists:cashier_men,id',
             'branch_id' => 'nullable|exists:branches,id',
         ]);
 
@@ -50,10 +43,6 @@ class CashierController extends Controller
             'status' => true,
             'message' => 'Cashier created successfully.',
             'data' => new CashierResource($cashier->load('branch')),
-            'select_options' => [
-                'branches' => Branch::select('id', 'name')->get(),
-                'cashier_men' => CashierMan::select('id', 'name')->get(),
-            ],
         ], 201);
     }
 
@@ -64,7 +53,6 @@ class CashierController extends Controller
             'data' => new CashierResource($cashier->load('branch')),
             'select_options' => [
                 'branches' => Branch::select('id', 'name')->get(),
-                'cashier_men' => CashierMan::select('id', 'name')->get(),
             ],
         ]);
     }
@@ -73,7 +61,7 @@ class CashierController extends Controller
     {
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'cashier_man_id' => 'nullable|exists:cashier_men,id',
+            'cashier_man_id' => 'sometimes|nullable|exists:cashier_men,id',
             'branch_id' => 'nullable|exists:branches,id',
         ]);
 
@@ -83,10 +71,6 @@ class CashierController extends Controller
             'status' => true,
             'message' => 'Cashier updated successfully.',
             'data' => new CashierResource($cashier->fresh(['branch'])),
-            'select_options' => [
-                'branches' => Branch::select('id', 'name')->get(),
-                'cashier_men' => CashierMan::select('id', 'name')->get(),
-            ],
         ]);
     }
 

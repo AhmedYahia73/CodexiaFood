@@ -54,7 +54,7 @@ class CashierController extends BaseBranchController
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'cashier_man_id' => 'nullable|exists:cashier_men,id',
+            'cashier_man_id' => 'sometimes|nullable|exists:cashier_men,id',
             'branch_id' => 'sometimes|nullable|integer',
         ]);
 
@@ -104,7 +104,7 @@ class CashierController extends BaseBranchController
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'cashier_man_id' => 'nullable|exists:cashier_men,id',
+            'cashier_man_id' => 'sometimes|nullable|exists:cashier_men,id',
             'branch_id' => 'sometimes|nullable|integer',
         ]);
 

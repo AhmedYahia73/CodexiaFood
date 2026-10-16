@@ -27,7 +27,7 @@ class ProductManufacturingResource extends JsonResource
             'product_recipe' => $this->relationLoaded('productRecipe') && $this->productRecipe ? [
                 'id' => $this->productRecipe->id,
                 'name' => $this->productRecipe->name,
-                'stock' => $branchId ? (float) $this->productRecipe->stockForBranch((int) $branchId) : (float) $this->productRecipe->totalStock(),
+                'stock' => $this->when($branchId !== null, fn () => (float) $this->productRecipe->stockForBranch((int) $branchId)),
             ] : null,
             'recipes' => ProductRecipeManufacturingResource::collection($this->whenLoaded('productRecipeManufacturings')),
             'created_at' => $this->created_at?->toIso8601String(),

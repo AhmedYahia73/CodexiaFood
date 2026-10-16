@@ -23,13 +23,13 @@ class ProductRecipeManufacturingResource extends JsonResource
             'material' => $this->relationLoaded('material') && $this->material ? [
                 'id' => $this->material->id,
                 'name' => $this->material->name,
-                'stock' => $branchId ? (float) $this->material->stockForBranch((int) $branchId) : (float) $this->material->totalStock(),
+                'stock' => $this->when($branchId !== null, fn () => (float) $this->material->stockForBranch((int) $branchId)),
             ] : null,
             'product_recipe_id' => $this->product_recipe_id,
             'product_recipe' => $this->relationLoaded('productRecipe') && $this->productRecipe ? [
                 'id' => $this->productRecipe->id,
                 'name' => $this->productRecipe->name,
-                'stock' => $branchId ? (float) $this->productRecipe->stockForBranch((int) $branchId) : (float) $this->productRecipe->totalStock(),
+                'stock' => $this->when($branchId !== null, fn () => (float) $this->productRecipe->stockForBranch((int) $branchId)),
             ] : null,
             'count' => (int) $this->count,
             'created_at' => $this->created_at?->toIso8601String(),

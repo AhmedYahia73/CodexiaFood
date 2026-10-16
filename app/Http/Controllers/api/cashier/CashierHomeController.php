@@ -378,8 +378,16 @@ class CashierHomeController extends Controller
                 'status' => false,
                 'message' => 'هذا الكاشير مرتبط بكاشير مان اخر',
             ], 400);
-
         }
+
+        $targetCashier = Cashier::find($validated['cashier_id']);
+        if ($targetCashier && $targetCashier->cashier_man_id && $targetCashier->cashier_man_id != $cashierManId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'هذا الكاشير مرتبط بكاشير مان اخر',
+            ], 400);
+        }
+
         $hasOpenShift = StartShift::where('cashier_man_id', $cashierManId)
             ->where('branch_id', $branchId)
             ->whereNull('end')
@@ -397,6 +405,10 @@ class CashierHomeController extends Controller
                 'cashier_id' => $validated['cashier_id'],
             ]);
         }
+
+        Cashier::where('id', $validated['cashier_id'])->update([
+            'cashier_man_id' => $cashierManId,
+        ]);
 
         $startShift = StartShift::create([
             'start' => now(),

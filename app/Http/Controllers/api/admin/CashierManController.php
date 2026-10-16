@@ -5,7 +5,6 @@ namespace App\Http\Controllers\api\admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CashierManResource;
 use App\Models\Branch;
-use App\Models\Cashier;
 use App\Models\CashierMan;
 use App\Models\Shift;
 use Illuminate\Http\JsonResponse;
@@ -26,7 +25,6 @@ class CashierManController extends Controller
     {
         return [
             'branches' => Branch::select('id', 'name')->get(),
-            'cashiers' => Cashier::select('id', 'name')->get(),
             'shifts' => Shift::select('id', 'name', 'branch_id', 'start_time', 'end_time', 'is_tomorrow')->get(),
         ];
     }
@@ -35,9 +33,7 @@ class CashierManController extends Controller
     {
         $cashierMen = CashierMan::with(['branch', 'cashier', 'shift'])->latest()->paginate($request->get('per_page', 15));
 
-        return CashierManResource::collection($cashierMen)->additional([
-            'select_options' => $this->getSelectOptionsData(),
-        ]);
+        return CashierManResource::collection($cashierMen);
     }
 
     public function store(Request $request): JsonResponse
@@ -45,7 +41,7 @@ class CashierManController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'password' => 'required|string|min:6',
-            'cashier_id' => 'nullable|exists:cashiers,id',
+            'cashier_id' => 'sometimes|nullable|exists:cashiers,id',
             'branch_id' => 'nullable|exists:branches,id',
             'shift_id' => 'nullable|exists:shifts,id',
         ]);
@@ -56,7 +52,6 @@ class CashierManController extends Controller
             'status' => true,
             'message' => 'CashierMan created successfully.',
             'data' => new CashierManResource($cashierMan->load(['branch', 'cashier', 'shift'])),
-            'select_options' => $this->getSelectOptionsData(),
         ], 201);
     }
 
@@ -74,7 +69,7 @@ class CashierManController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'password' => 'nullable|string|min:6',
-            'cashier_id' => 'nullable|exists:cashiers,id',
+            'cashier_id' => 'sometimes|nullable|exists:cashiers,id',
             'branch_id' => 'nullable|exists:branches,id',
             'shift_id' => 'nullable|exists:shifts,id',
         ]);
@@ -89,7 +84,6 @@ class CashierManController extends Controller
             'status' => true,
             'message' => 'CashierMan updated successfully.',
             'data' => new CashierManResource($cashierMan->fresh(['branch', 'cashier', 'shift'])),
-            'select_options' => $this->getSelectOptionsData(),
         ]);
     }
 
