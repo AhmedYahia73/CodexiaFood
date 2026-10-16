@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\api\admin\AddonController;
 use App\Http\Controllers\api\admin\AdminController;
 use App\Http\Controllers\api\admin\BranchController;
 use App\Http\Controllers\api\admin\BusinessSetupController;
@@ -31,6 +32,7 @@ use App\Http\Controllers\api\admin\SupplierController;
 use App\Http\Controllers\api\admin\TaxController;
 use App\Http\Controllers\api\admin\WasteController;
 use App\Http\Controllers\api\AuthController;
+use App\Http\Controllers\api\branch\AddonController as BranchAddonController;
 use App\Http\Controllers\api\branch\CashierController as BranchCashierController;
 use App\Http\Controllers\api\branch\CashierManController as BranchCashierManController;
 use App\Http\Controllers\api\branch\DashboardController as BranchDashboardController;
@@ -81,6 +83,8 @@ Route::prefix('auth')->group(function () {
 */
 Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function () {
     // Select options endpoints for frontend dropdowns
+    Route::get('addons/lists', [AddonController::class, 'lists']);
+    Route::get('addons/select-options', [AddonController::class, 'selectOptions']);
     Route::get('admins/select-options', [AdminController::class, 'selectOptions']);
     Route::get('branches/select-options', [BranchController::class, 'selectOptions']);
     Route::get('cashier-men/select-options', [CashierManController::class, 'selectOptions']);
@@ -126,6 +130,8 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::get('dashboard/statistics', [DashboardController::class, 'statistics']);
 
+    Route::match(['put', 'patch', 'post'], 'addons/{addon}', [AddonController::class, 'update']);
+    Route::apiResource('addons', AddonController::class);
     Route::apiResource('admins', AdminController::class);
     Route::apiResource('branches', BranchController::class);
     Route::apiResource('cashier-men', CashierManController::class);
@@ -190,6 +196,8 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
 */
 Route::middleware(['auth:branch', 'role:branch'])->prefix('branch')->group(function () {
     // Select options endpoints for frontend dropdowns
+    Route::get('addons/lists', [BranchAddonController::class, 'lists']);
+    Route::get('addons/select-options', [BranchAddonController::class, 'selectOptions']);
     Route::get('cashier-men/select-options', [BranchCashierManController::class, 'selectOptions']);
     Route::get('cashiers/select-options', [BranchCashierController::class, 'selectOptions']);
     Route::get('deliveries/select-options', [BranchDeliveryController::class, 'selectOptions']);
@@ -225,6 +233,8 @@ Route::middleware(['auth:branch', 'role:branch'])->prefix('branch')->group(funct
     Route::get('dashboard', [BranchDashboardController::class, 'index']);
     Route::get('dashboard/statistics', [BranchDashboardController::class, 'statistics']);
 
+    Route::match(['put', 'patch', 'post'], 'addons/{addon}', [BranchAddonController::class, 'update']);
+    Route::apiResource('addons', BranchAddonController::class);
     Route::apiResource('cashier-men', BranchCashierManController::class);
     Route::apiResource('cashiers', BranchCashierController::class);
     Route::apiResource('deliveries', BranchDeliveryController::class);
