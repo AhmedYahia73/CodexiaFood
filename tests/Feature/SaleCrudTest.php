@@ -99,6 +99,7 @@ test('admin can create sale with direct materials and recipes deducting branch s
     $payload = [
         'branch_id' => $this->branch->id,
         'saler_id' => $this->saler->id,
+        'total_cost' => 450.00,
         'paid_amount' => 100.00,
         'due_date' => '2026-12-01',
         'items' => [
@@ -177,6 +178,7 @@ test('admin selling a product deducts its BOM recipe components', function () {
     $payload = [
         'branch_id' => $this->branch->id,
         'saler_id' => $this->saler->id,
+        'total_cost' => 400.00,
         'paid_amount' => 400.00,
         'items' => [
             [
@@ -233,6 +235,7 @@ test('insufficient recipe component stock returns 422 with can_bypass: true', fu
     $payload = [
         'branch_id' => $this->branch->id,
         'saler_id' => $this->saler->id,
+        'total_cost' => 200.00,
         'items' => [
             [
                 'product_id' => $product->id,
@@ -275,6 +278,7 @@ test('creating sale with multiple installment dues creates multiple sale_dues re
     $payload = [
         'branch_id' => $this->branch->id,
         'saler_id' => $this->saler->id,
+        'total_cost' => 400.00,
         'paid_amount' => 100.00,
         'notes' => 'بيع سكر مع أقساط',
         'dues' => [

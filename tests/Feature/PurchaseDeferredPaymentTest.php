@@ -39,6 +39,7 @@ test('creating purchase with partial paid_amount creates purchase_due and increm
     $payload = [
         'branch_id' => $this->branch->id,
         'supplier_id' => $this->supplier->id,
+        'total_cost' => 1000.00,
         'paid_amount' => 400.00,
         'due_date' => '2026-11-15',
         'notes' => 'شراء زيت مع دفع مقدم',
@@ -91,6 +92,7 @@ test('creating purchase with full payment does not create dues and does not chan
     $payload = [
         'branch_id' => $this->branch->id,
         'supplier_id' => $this->supplier->id,
+        'total_cost' => 500.00,
         'paid_amount' => 500.00,
         'items' => [
             [
@@ -122,6 +124,7 @@ test('creating purchase with multiple installment dues creates multiple purchase
     $payload = [
         'branch_id' => $this->branch->id,
         'supplier_id' => $this->supplier->id,
+        'total_cost' => 1000.00,
         'paid_amount' => 400.00,
         'notes' => 'شراء على 3 أقساط',
         'dues' => [

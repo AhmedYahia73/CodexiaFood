@@ -115,6 +115,7 @@ test('admin can create purchase with multiple items having individual quantity a
 
     $payload = [
         'branch_id' => $this->branch->id,
+        'total_cost' => 230.00,
         'notes' => 'First purchase invoice',
         'items' => [
             [
@@ -189,6 +190,7 @@ test('admin can create purchase with receipt image and item specifying both mate
 
     $payload = [
         'branch_id' => $this->branch->id,
+        'total_cost' => 120.00,
         'receipt' => $file,
         'items' => [
             [
