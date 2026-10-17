@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api\cashier;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Models\Cashier;
+use App\Models\FinancialAccount;
 use App\Models\MaterialStock;
 use App\Models\Order;
 use App\Models\OrderCart;
@@ -283,11 +284,11 @@ class CashierOrderController extends Controller
             /**
              * Financial Account ID for payment collection.
              *
-             * @var int
+             * @var int|null
              *
              * @example 1
              */
-            'financial_account_id' => 'required_without:financial_id|nullable|integer|exists:financial_accounts,id',
+            'financial_account_id' => 'required_without:financial_id|nullable|integer',
 
             /**
              * Alias for financial_account_id.
@@ -296,7 +297,7 @@ class CashierOrderController extends Controller
              *
              * @example 1
              */
-            'financial_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
+            'financial_id' => 'sometimes|nullable|integer',
         ]);
 
         $financialAccountId = $validated['financial_account_id'] ?? $validated['financial_id'] ?? null;
@@ -304,7 +305,40 @@ class CashierOrderController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'يرجى تحديد الحساب المالي لإتمام الطلب',
+                'errors' => [
+                    'financial_account_id' => ['يرجى تحديد الحساب المالي لإتمام الطلب'],
+                ],
             ], 422);
+        }
+
+        // Verify if account exists in database; if not, self-heal via fallbacks
+        if (! FinancialAccount::where('id', $financialAccountId)->exists()) {
+            $openShift = StartShift::where('cashier_id', $cashierId)
+                ->whereNull('end')
+                ->latest('start')
+                ->first();
+
+            if ($openShift?->financial_account_id && FinancialAccount::where('id', $openShift->financial_account_id)->exists()) {
+                $financialAccountId = $openShift->financial_account_id;
+            } else {
+                $branchId = auth()->user()?->branch_id;
+                $financialAccountId = FinancialAccount::query()
+                    ->where('status', true)
+                    ->when($branchId, fn ($q) => $q->whereNull('branch_id')->orWhere('branch_id', $branchId))
+                    ->value('id')
+                    ?? FinancialAccount::where('status', true)->value('id')
+                    ?? FinancialAccount::value('id');
+
+                if (! $financialAccountId) {
+                    $defaultAcc = FinancialAccount::create([
+                        'name' => ['ar' => 'الخزينة النقدية الرئيسية', 'en' => 'Main Cash Treasury'],
+                        'status' => true,
+                        'balance' => 0.00,
+                        'branch_id' => $branchId,
+                    ]);
+                    $financialAccountId = $defaultAcc->id;
+                }
+            }
         }
 
         $tableId = $validated['hall_table_id'] ?? $validated['table_id'] ?? null;

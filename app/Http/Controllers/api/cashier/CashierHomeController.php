@@ -696,32 +696,66 @@ class CashierHomeController extends Controller
 
         $branchId = $request->query('branch_id') ?? auth()->user()?->branch_id;
 
-        $accounts = FinancialAccount::query()
-            ->where('status', true)
+        $accountsQuery = FinancialAccount::query()
+            ->where(function ($q) {
+                $q->where('status', true)->orWhereNull('status');
+            })
             ->when($branchId, function ($query) use ($branchId) {
                 $query->where(function ($q) use ($branchId) {
                     $q->whereNull('branch_id')->orWhere('branch_id', $branchId);
                 });
             })
             ->orderBy('id', 'asc')
-            ->get()
-            ->map(function (FinancialAccount $acc) use ($locale) {
-                $localizedName = $this->getLocalized($acc->name, $locale) ?? (string) $acc->name;
+            ->get();
 
-                $iconUrl = null;
-                if ($acc->icon) {
-                    $iconUrl = (str_starts_with($acc->icon, 'http://') || str_starts_with($acc->icon, 'https://'))
-                        ? $acc->icon
-                        : url('storage/'.ltrim($acc->icon, '/'));
-                }
+        // Fallback 1: If no accounts found for this specific branch, load all active accounts across branches
+        if ($accountsQuery->isEmpty()) {
+            $accountsQuery = FinancialAccount::query()
+                ->where(function ($q) {
+                    $q->where('status', true)->orWhereNull('status');
+                })
+                ->orderBy('id', 'asc')
+                ->get();
+        }
 
-                return [
-                    'id' => $acc->id,
-                    'name' => $localizedName,
-                    'icon' => $iconUrl,
-                    'balance' => (float) $acc->balance,
-                ];
-            });
+        // Fallback 2: If still empty, check if any accounts exist regardless of status
+        if ($accountsQuery->isEmpty()) {
+            $accountsQuery = FinancialAccount::query()
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        // Fallback 3: If table has no accounts at all, create a default cash treasury account
+        if ($accountsQuery->isEmpty()) {
+            $defaultAcc = FinancialAccount::create([
+                'name' => ['ar' => 'الخزينة النقدية الرئيسية', 'en' => 'Main Cash Treasury'],
+                'status' => true,
+                'balance' => 0.00,
+                'branch_id' => $branchId,
+            ]);
+            $accountsQuery = collect([$defaultAcc]);
+        }
+
+        $accounts = $accountsQuery->map(function (FinancialAccount $acc) use ($locale) {
+            $name = $acc->name;
+            $localizedName = is_array($name)
+                ? ($name[$locale] ?? $name['ar'] ?? $name['en'] ?? '')
+                : (string) $name;
+
+            $iconUrl = null;
+            if ($acc->icon) {
+                $iconUrl = (str_starts_with($acc->icon, 'http://') || str_starts_with($acc->icon, 'https://'))
+                    ? $acc->icon
+                    : url('storage/'.ltrim($acc->icon, '/'));
+            }
+
+            return [
+                'id' => $acc->id,
+                'name' => $localizedName ?: 'الخزينة النقدية الرئيسية',
+                'icon' => $iconUrl,
+                'balance' => (float) $acc->balance,
+            ];
+        });
 
         return response()->json([
             'status' => true,

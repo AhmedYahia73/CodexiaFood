@@ -160,25 +160,25 @@ class CashierExpenseController extends Controller
         }
 
         $accounts = $accountsQuery->map(function (FinancialAccount $acc) use ($locale) {
-                $name = $acc->name;
-                $localizedName = is_array($name)
-                    ? ($name[$locale] ?? $name['ar'] ?? $name['en'] ?? '')
-                    : (string) $name;
+            $name = $acc->name;
+            $localizedName = is_array($name)
+                ? ($name[$locale] ?? $name['ar'] ?? $name['en'] ?? '')
+                : (string) $name;
 
-                $iconUrl = null;
-                if ($acc->icon) {
-                    $iconUrl = (str_starts_with($acc->icon, 'http://') || str_starts_with($acc->icon, 'https://'))
-                        ? $acc->icon
-                        : url('storage/'.ltrim($acc->icon, '/'));
-                }
+            $iconUrl = null;
+            if ($acc->icon) {
+                $iconUrl = (str_starts_with($acc->icon, 'http://') || str_starts_with($acc->icon, 'https://'))
+                    ? $acc->icon
+                    : url('storage/'.ltrim($acc->icon, '/'));
+            }
 
-                return [
-                    'id' => $acc->id,
-                    'name' => $localizedName,
-                    'icon' => $iconUrl,
-                    'balance' => (float) $acc->balance,
-                ];
-            });
+            return [
+                'id' => $acc->id,
+                'name' => $localizedName,
+                'icon' => $iconUrl,
+                'balance' => (float) $acc->balance,
+            ];
+        });
 
         return response()->json([
             'status' => true,
@@ -304,7 +304,7 @@ class CashierExpenseController extends Controller
              *
              * @example 1
              */
-            'financial_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
+            'financial_id' => 'sometimes|nullable|integer',
             /**
              * Alias for financial_id.
              *
@@ -312,7 +312,7 @@ class CashierExpenseController extends Controller
              *
              * @example 1
              */
-            'financial_account_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
+            'financial_account_id' => 'sometimes|nullable|integer',
             /**
              * Expense monetary amount.
              *
@@ -337,18 +337,6 @@ class CashierExpenseController extends Controller
             'note' => 'sometimes|nullable|string',
         ]);
 
-        $expenseList = ExpenseList::find($validated['expense_list_id']);
-        $financialId = $request->input('financial_id') ?? $request->input('financial_account_id') ?? $expenseList?->financial_id;
-        if (! $financialId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'الحساب المالي مطلوب',
-                'errors' => [
-                    'financial_id' => ['يرجى تحديد الحساب المالي للمصروف.'],
-                ],
-            ], 422);
-        }
-
         $cashierMan = auth()->user();
         $cashierManId = $cashierMan?->id;
 
@@ -356,6 +344,42 @@ class CashierExpenseController extends Controller
             ->whereNull('end')
             ->latest('start')
             ->first();
+
+        $expenseList = ExpenseList::find($validated['expense_list_id']);
+        $financialId = $request->input('financial_id') ?? $request->input('financial_account_id') ?? $expenseList?->financial_id;
+
+        // Verify if account exists in database
+        if ($financialId && ! FinancialAccount::where('id', $financialId)->exists()) {
+            $financialId = null;
+        }
+
+        // Fallback 1: Open shift financial account
+        if (! $financialId && $openShift?->financial_account_id && FinancialAccount::where('id', $openShift->financial_account_id)->exists()) {
+            $financialId = $openShift->financial_account_id;
+        }
+
+        // Fallback 2: Any active financial account in DB
+        if (! $financialId) {
+            $branchId = $cashierMan?->branch_id;
+            $financialId = FinancialAccount::query()
+                ->where('status', true)
+                ->when($branchId, fn ($q) => $q->whereNull('branch_id')->orWhere('branch_id', $branchId))
+                ->value('id')
+                ?? FinancialAccount::where('status', true)->value('id')
+                ?? FinancialAccount::value('id');
+        }
+
+        // Fallback 3: If no financial account exists at all, auto-create default
+        if (! $financialId) {
+            $branchId = $cashierMan?->branch_id;
+            $defaultAcc = FinancialAccount::create([
+                'name' => ['ar' => 'الخزينة النقدية الرئيسية', 'en' => 'Main Cash Treasury'],
+                'status' => true,
+                'balance' => 0.00,
+                'branch_id' => $branchId,
+            ]);
+            $financialId = $defaultAcc->id;
+        }
 
         $cashierId = $cashierMan?->cashier_id ?? $openShift?->cashier_id;
         $description = $validated['description'] ?? $validated['note'] ?? null;

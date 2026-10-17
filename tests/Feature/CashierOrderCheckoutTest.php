@@ -242,3 +242,25 @@ test('checkout fails when cart is empty for requested module', function () {
             'message' => 'السلة فارغة لهذا القسم',
         ]);
 });
+
+test('checkout gracefully handles invalid or nonexistent financial_account_id without 422', function () {
+    // Add item to takeaway cart
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(201);
+
+    // Send an invalid non-existent financial_account_id e.g. 999999
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/orders/checkout', [
+            'module' => 'takeaway',
+            'financial_account_id' => 999999,
+        ])
+        ->assertStatus(201);
+
+    expect($response->json('status'))->toBeTrue();
+    expect($response->json('data.financial_account_id'))->not->toBeNull();
+});
