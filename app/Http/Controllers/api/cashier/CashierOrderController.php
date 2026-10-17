@@ -283,11 +283,11 @@ class CashierOrderController extends Controller
             /**
              * Financial Account ID for payment collection.
              *
-             * @var int|null
+             * @var int
              *
              * @example 1
              */
-            'financial_account_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
+            'financial_account_id' => 'required_without:financial_id|nullable|integer|exists:financial_accounts,id',
 
             /**
              * Alias for financial_account_id.
@@ -301,24 +301,10 @@ class CashierOrderController extends Controller
 
         $financialAccountId = $validated['financial_account_id'] ?? $validated['financial_id'] ?? null;
         if (! $financialAccountId) {
-            $openShift = StartShift::where('cashier_man_id', auth()->id())
-                ->whereNull('end')
-                ->latest('start')
-                ->first();
-
-            $financialAccountId = $openShift?->financial_account_id
-                ?? FinancialAccount::where('status', true)->value('id')
-                ?? FinancialAccount::value('id');
-
-            if (! $financialAccountId) {
-                $defaultAcc = FinancialAccount::create([
-                    'name' => ['ar' => 'الخزينة النقدية الرئيسية', 'en' => 'Main Cash Treasury'],
-                    'status' => true,
-                    'balance' => 0.00,
-                    'branch_id' => auth()->user()?->branch_id,
-                ]);
-                $financialAccountId = $defaultAcc->id;
-            }
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد الحساب المالي لإتمام الطلب',
+            ], 422);
         }
 
         $tableId = $validated['hall_table_id'] ?? $validated['table_id'] ?? null;
