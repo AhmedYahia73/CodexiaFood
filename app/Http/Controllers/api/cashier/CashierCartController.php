@@ -33,9 +33,10 @@ class CashierCartController extends Controller
         return str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
     }
 
-    private function cartQuery(int $cashierId): Builder
+    private function cartQuery(int $cashierId, ?int $tableId = null): Builder
     {
         return OrderCart::with([
+            'hallTable.hall',
             'product.discount',
             'product.tax',
             'variationCarts.variation',
@@ -44,6 +45,8 @@ class CashierCartController extends Controller
         ])->where(function ($query) use ($cashierId) {
             $query->where('cashier_id', $cashierId)
                 ->orWhereNull('cashier_id');
+        })->when($tableId, function ($query) use ($tableId) {
+            $query->where('hall_table_id', $tableId);
         });
     }
 
@@ -68,13 +71,60 @@ class CashierCartController extends Controller
         }
 
         $validated = $request->validate([
+            /**
+             * Order module enum.
+             *
+             * @var string
+             *
+             * @example takeaway
+             */
             'module' => 'required|in:takeaway,dinein,delivery',
+
+            /**
+             * Hall Table ID for dinein cart.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Hall Table ID alias for dinein cart.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Response language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
             'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
 
-        $query = $this->cartQuery($cashierId)
+        if ($validated['module'] === 'dinein' && ! $tableId) {
+            return response()->json([
+                'status' => true,
+                'data' => [],
+                'grand_totals' => [
+                    'grand_total_price' => 0.00,
+                    'grand_total_discount' => 0.00,
+                    'grand_total_tax' => 0.00,
+                    'grand_final_price' => 0.00,
+                ],
+            ]);
+        }
+
+        $query = $this->cartQuery($cashierId, $validated['module'] === 'dinein' ? $tableId : null)
             ->where('module', $validated['module']);
 
         $carts = $query->latest('id')->get();
@@ -106,18 +156,91 @@ class CashierCartController extends Controller
         }
 
         $validated = $request->validate([
+            /**
+             * Order module enum.
+             *
+             * @var string
+             *
+             * @example takeaway
+             */
             'module' => 'required|in:takeaway,dinein,delivery',
+
+            /**
+             * Hall Table ID for dinein.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Hall Table ID alias for dinein.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Product ID.
+             *
+             * @var int
+             *
+             * @example 1
+             */
             'product_id' => 'required|exists:products,id',
+
+            /**
+             * Quantity.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
             'quantity' => 'nullable|integer|min:1',
+
+            /**
+             * Bypass stock check if recipes are insufficient.
+             *
+             * @var bool|null
+             */
             'without_recipe' => 'sometimes|nullable|boolean',
+
+            /**
+             * Special item notes.
+             *
+             * @var string|null
+             */
             'notes' => 'nullable|string',
+
+            /**
+             * Variations.
+             *
+             * @var array|null
+             */
             'variations' => 'nullable|array',
             'variations.*.variation_id' => 'required_with:variations|exists:variations,id',
             'variations.*.option_ids' => 'required_with:variations|array',
             'variations.*.option_ids.*' => 'exists:options,id',
+
+            /**
+             * Addons.
+             *
+             * @var array|null
+             */
             'addons' => 'nullable|array',
             'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
         ]);
+
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+        if ($validated['module'] === 'dinein' && ! $tableId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد الطاولة لإضافة الطلب المحلي (طاولة)',
+            ], 422);
+        }
 
         $cashier = Cashier::find($cashierId);
         $branchId = $cashier?->branch_id ?? auth()->user()?->branch_id;
@@ -197,13 +320,14 @@ class CashierCartController extends Controller
 
         $locale = $this->getLocale($request);
 
-        $cart = DB::transaction(function () use ($validated, $cashierId, $branchId): OrderCart {
+        $cart = DB::transaction(function () use ($validated, $tableId, $cashierId, $branchId): OrderCart {
             $cart = OrderCart::create([
                 'module' => $validated['module'],
                 'product_id' => $validated['product_id'],
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
                 'branch_id' => $branchId,
+                'hall_table_id' => $validated['module'] === 'dinein' ? $tableId : null,
                 'quantity' => $validated['quantity'] ?? 1,
                 'notes' => $validated['notes'] ?? null,
             ]);
@@ -371,13 +495,43 @@ class CashierCartController extends Controller
         }
 
         $validated = $request->validate([
+            /**
+             * Order module enum.
+             *
+             * @var string|null
+             *
+             * @example takeaway
+             */
             'module' => 'sometimes|nullable|string|in:takeaway,dinein,delivery',
+
+            /**
+             * Hall Table ID for dinein cart.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Hall Table ID alias.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
         ]);
 
         $query = OrderCart::where('cashier_id', $cashierId);
 
         if (! empty($validated['module'])) {
             $query->where('module', $validated['module']);
+        }
+
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+        if (! empty($tableId)) {
+            $query->where('hall_table_id', $tableId);
         }
 
         $query->delete();

@@ -5,6 +5,8 @@ use App\Models\Branch;
 use App\Models\Cashier;
 use App\Models\CashierMan;
 use App\Models\Discount;
+use App\Models\Hall;
+use App\Models\HallTable;
 use App\Models\Option;
 use App\Models\Product;
 use App\Models\Tax;
@@ -34,6 +36,19 @@ beforeEach(function () {
     ]);
 
     $this->token = JWTAuth::fromUser($this->cashierMan);
+
+    $this->hall = Hall::create([
+        'name' => ['ar' => 'الصالة الرئيسية', 'en' => 'Main Hall'],
+        'branch_id' => $this->branch->id,
+        'status' => true,
+    ]);
+
+    $this->hallTable = HallTable::create([
+        'name' => 'Table #1',
+        'hall_id' => $this->hall->id,
+        'branch_id' => $this->branch->id,
+        'status' => true,
+    ]);
 
     // 20% discount
     $this->discount = Discount::create([
@@ -134,6 +149,7 @@ test('cashier cart index calculates item totals and grand totals correctly', fun
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/cart', [
             'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
             'product_id' => $this->product->id,
             'quantity' => 2,
             'notes' => 'حار جدا',
@@ -152,7 +168,7 @@ test('cashier cart index calculates item totals and grand totals correctly', fun
         ->assertStatus(201);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
-        ->getJson('/api/cashier/cart?module=dinein&lang=ar')
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id.'&lang=ar')
         ->assertStatus(200)
         ->assertJsonStructure([
             'status',
@@ -277,6 +293,7 @@ test('cashier cart index requires valid module and filters by specified module o
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/cart', [
             'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
             'product_id' => $this->product->id,
             'quantity' => 2,
         ])->assertStatus(201);
@@ -296,9 +313,9 @@ test('cashier cart index requires valid module and filters by specified module o
     expect($takeawayRes->json('data.0.module'))->toBe('takeaway');
     expect($takeawayRes->json('data.0.quantity'))->toBe(1);
 
-    // Fetch dinein only
+    // Fetch dinein with table_id
     $dineinRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
-        ->getJson('/api/cashier/cart?module=dinein')
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id)
         ->assertStatus(200);
     expect($dineinRes->json('data'))->toHaveCount(1);
     expect($dineinRes->json('data.0.module'))->toBe('dinein');
@@ -311,4 +328,81 @@ test('cashier cart index requires valid module and filters by specified module o
     expect($deliveryRes->json('data'))->toHaveCount(1);
     expect($deliveryRes->json('data.0.module'))->toBe('delivery');
     expect($deliveryRes->json('data.0.quantity'))->toBe(3);
+});
+
+test('cashier dinein cart requires table_id on store and isolates carts per table', function () {
+    // Missing table_id on dinein store returns 422
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(422);
+
+    // Create a second table
+    $secondTable = HallTable::create([
+        'name' => 'Table #2',
+        'hall_id' => $this->hall->id,
+        'branch_id' => $this->branch->id,
+        'status' => true,
+    ]);
+
+    // Add item for table 1
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'product_id' => $this->product->id,
+            'quantity' => 2,
+        ])
+        ->assertStatus(201);
+
+    // Add item for table 2
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'table_id' => $secondTable->id,
+            'product_id' => $this->product->id,
+            'quantity' => 5,
+        ])
+        ->assertStatus(201);
+
+    // Querying without table_id returns empty cart
+    $emptyRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein')
+        ->assertStatus(200);
+    expect($emptyRes->json('data'))->toHaveCount(0);
+
+    // Table 1 cart has 1 item with qty 2
+    $t1Res = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id)
+        ->assertStatus(200);
+    expect($t1Res->json('data'))->toHaveCount(1);
+    expect($t1Res->json('data.0.quantity'))->toBe(2);
+
+    // Table 2 cart has 1 item with qty 5
+    $t2Res = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$secondTable->id)
+        ->assertStatus(200);
+    expect($t2Res->json('data'))->toHaveCount(1);
+    expect($t2Res->json('data.0.quantity'))->toBe(5);
+
+    // Clearing table 1 does not affect table 2
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->deleteJson('/api/cashier/cart/clear', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+        ])
+        ->assertStatus(200);
+
+    $t1After = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id)
+        ->assertStatus(200);
+    expect($t1After->json('data'))->toHaveCount(0);
+
+    $t2After = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$secondTable->id)
+        ->assertStatus(200);
+    expect($t2After->json('data'))->toHaveCount(1);
 });

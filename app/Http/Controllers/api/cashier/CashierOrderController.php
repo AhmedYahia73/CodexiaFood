@@ -82,6 +82,24 @@ class CashierOrderController extends Controller
             'name' => 'sometimes|nullable|string|max:255',
 
             /**
+             * Filter orders by hall table ID.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Filter orders by hall table ID alias.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
              * Number of items per page.
              *
              * @var int
@@ -117,6 +135,11 @@ class CashierOrderController extends Controller
 
         if (! empty($validated['module'])) {
             $query->where('module', $validated['module']);
+        }
+
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+        if (! empty($tableId)) {
+            $query->where('hall_table_id', $tableId);
         }
 
         if (! empty($validated['id'])) {
@@ -198,16 +221,70 @@ class CashierOrderController extends Controller
         }
 
         $validated = $request->validate([
+            /**
+             * Order module enum.
+             *
+             * @var string
+             *
+             * @example takeaway
+             */
             'module' => 'required|in:takeaway,dinein,delivery',
-            'hall_table_id' => 'required_if:module,dinein|nullable|exists:hall_tables,id',
+
+            /**
+             * Hall Table ID for dinein.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|exists:hall_tables,id',
+
+            /**
+             * Hall Table ID alias.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'sometimes|nullable|exists:hall_tables,id',
+
+            /**
+             * Customer delivery address.
+             *
+             * @var string|null
+             */
             'address' => 'required_if:module,delivery|nullable|string',
+
+            /**
+             * Customer phone number.
+             *
+             * @var string|null
+             *
+             * @example "01012345678"
+             */
             'phone' => 'required_if:module,delivery|nullable|string|max:50',
+
+            /**
+             * Customer name.
+             *
+             * @var string|null
+             *
+             * @example "Ahmed Ali"
+             */
             'name' => 'required_if:module,delivery|nullable|string|max:255',
+
+            /**
+             * Order notes.
+             *
+             * @var string|null
+             */
             'note' => 'nullable|string',
         ]);
 
+        $tableId = $validated['hall_table_id'] ?? $validated['table_id'] ?? null;
+
         // Fetch cart items for current cashier and module
-        $carts = OrderCart::with([
+        $cartsQuery = OrderCart::with([
             'product.discount',
             'product.tax',
             'variationCarts.variation',
@@ -215,8 +292,19 @@ class CashierOrderController extends Controller
             'addonCarts.addon.tax',
         ])
             ->where('cashier_id', $cashierId)
-            ->where('module', $validated['module'])
-            ->get();
+            ->where('module', $validated['module']);
+
+        if ($validated['module'] === 'dinein') {
+            if (! $tableId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'يرجى تحديد الطاولة لإتمام الطلب المحلي (طاولة)',
+                ], 422);
+            }
+            $cartsQuery->where('hall_table_id', $tableId);
+        }
+
+        $carts = $cartsQuery->get();
 
         if ($carts->isEmpty()) {
             return response()->json([
@@ -241,12 +329,12 @@ class CashierOrderController extends Controller
         $cashier = Cashier::find($cashierId);
         $branchId = $cashier?->branch_id ?? auth()->user()?->branch_id;
 
-        $order = DB::transaction(function () use ($validated, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
+        $order = DB::transaction(function () use ($validated, $tableId, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
             $order = Order::create([
                 'shift_id' => $openShiftId,
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
-                'hall_table_id' => $validated['hall_table_id'] ?? null,
+                'hall_table_id' => $tableId,
                 'module' => $validated['module'],
                 'address' => $validated['address'] ?? null,
                 'note' => $validated['note'] ?? null,
@@ -349,9 +437,7 @@ class CashierOrderController extends Controller
             }
 
             // Clear checked out cart items
-            OrderCart::where('cashier_id', $cashierId)
-                ->where('module', $validated['module'])
-                ->delete();
+            OrderCart::whereIn('id', $carts->pluck('id'))->delete();
 
             return $order;
         });

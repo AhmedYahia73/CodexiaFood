@@ -13,6 +13,7 @@ use App\Models\Category;
 use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Order;
+use App\Models\OrderCart;
 use App\Models\Product;
 use App\Models\StartShift;
 use App\Services\PriceCalculatorService;
@@ -303,12 +304,24 @@ class CashierHomeController extends Controller
     public function halls(Request $request): JsonResponse
     {
         $request->validate([
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
             'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
 
+        $cashierBranchId = auth()->user()?->branch_id;
+
         $halls = Hall::where('status', true)
+            ->when($cashierBranchId, fn ($q) => $q->where(function ($sub) use ($cashierBranchId) {
+                $sub->where('branch_id', $cashierBranchId)->orWhereNull('branch_id');
+            }))
             ->latest()
             ->get()
             ->map(fn (Hall $hall) => [
@@ -316,6 +329,7 @@ class CashierHomeController extends Controller
                 'name' => $this->getLocalized($hall->name, $locale),
                 'branch_id' => $hall->branch_id,
                 'status' => (bool) $hall->status,
+                'tables_count' => HallTable::where('hall_id', $hall->id)->where('status', true)->count(),
             ]);
 
         return response()->json([
@@ -330,7 +344,22 @@ class CashierHomeController extends Controller
     public function hallTables(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            /**
+             * Hall ID to filter tables.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
             'hall_id' => 'sometimes|nullable|integer|exists:halls,id',
+
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
             'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
@@ -349,6 +378,8 @@ class CashierHomeController extends Controller
             'branch_id' => $table->branch_id,
             'status' => (bool) $table->status,
             'qr' => $this->formatImageUrl($table->qr),
+            'has_active_cart' => OrderCart::where('hall_table_id', $table->id)->exists(),
+            'cart_items_count' => OrderCart::where('hall_table_id', $table->id)->count(),
         ]);
 
         return response()->json([

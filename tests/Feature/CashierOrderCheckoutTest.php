@@ -113,6 +113,7 @@ test('cashier checkout creates order and related tables from cart items and clea
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/cart', [
             'module' => 'dinein',
+            'hall_table_id' => $this->hallTable->id,
             'product_id' => $this->product->id,
             'quantity' => 2,
             'notes' => 'سريع من فضلك',

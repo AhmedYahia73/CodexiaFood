@@ -235,6 +235,8 @@ class PriceCalculatorService
         return [
             'id' => $cart->id,
             'module' => $cart->module,
+            'hall_table_id' => $cart->hall_table_id,
+            'table_id' => $cart->hall_table_id,
             'quantity' => $qty,
             'notes' => $cart->notes,
             'cashier_id' => $cart->cashier_id,
