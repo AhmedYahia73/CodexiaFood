@@ -16,6 +16,7 @@ class Order extends Model
         'cashier_id',
         'cashier_man_id',
         'hall_table_id',
+        'financial_account_id',
         'branch_id',
         'module',
         'address',
@@ -92,6 +93,27 @@ class Order extends Model
         return $this->belongsTo(HallTable::class);
     }
 
+    public function financialAccount(): BelongsTo
+    {
+        return $this->belongsTo(FinancialAccount::class, 'financial_account_id');
+    }
+
+    /**
+     * Alias accessor for financial_id.
+     */
+    public function getFinancialIdAttribute(): ?int
+    {
+        return $this->financial_account_id ? (int) $this->financial_account_id : null;
+    }
+
+    /**
+     * Alias mutator for financial_id.
+     */
+    public function setFinancialIdAttribute(mixed $value): void
+    {
+        $this->attributes['financial_account_id'] = $value ? (int) $value : null;
+    }
+
     public function orderProducts(): HasMany
     {
         return $this->hasMany(OrderProduct::class);
@@ -102,3 +124,4 @@ class Order extends Model
         return $this->hasMany(KitchenOrder::class);
     }
 }
+

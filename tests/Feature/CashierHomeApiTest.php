@@ -376,3 +376,84 @@ test('cashier man can fetch business setup via cashier api and only get method i
         ->postJson('/api/cashier/business-setup', [])
         ->assertStatus(405);
 });
+
+test('products and categories are localized by lang parameter and headers', function () {
+    $category = Category::create([
+        'name' => ['ar' => 'برجر دجاج', 'en' => 'Chicken Burger'],
+        'description' => ['ar' => 'قسم البرجر', 'en' => 'Burger section'],
+        'image' => 'categories/burger.jpg',
+        'status' => true,
+    ]);
+
+    $product = Product::create([
+        'name' => ['ar' => 'ساندوتش كرسبي', 'en' => 'Crispy Sandwich'],
+        'description' => ['ar' => 'دجاج مقرمش لذيذ', 'en' => 'Delicious crispy chicken'],
+        'image' => 'products/crispy.jpg',
+        'price' => 120,
+        'category_id' => $category->id,
+    ]);
+
+    $variation = Variation::create([
+        'name' => ['ar' => 'الحجم', 'en' => 'Size'],
+        'status' => true,
+        'required' => true,
+        'product_id' => $product->id,
+    ]);
+
+    Option::create([
+        'name' => ['ar' => 'كبير', 'en' => 'Large'],
+        'price' => 30,
+        'status' => true,
+        'product_id' => $product->id,
+        'variation_id' => $variation->id,
+    ]);
+
+    $addon = Addon::create([
+        'name' => ['ar' => 'بطاطس مقلية', 'en' => 'French Fries'],
+        'price' => 25,
+        'image' => 'addons/fries.jpg',
+    ]);
+
+    // 1. Fetching in Arabic with lang=ar
+    $catAr = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/categories/parents?lang=ar')
+        ->assertStatus(200);
+    $item = collect($catAr->json('data'))->firstWhere('id', $category->id);
+    expect($item['name'])->toBe('برجر دجاج');
+
+    $prodAr = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/products?lang=ar')
+        ->assertStatus(200);
+    $prodItem = collect($prodAr->json('data'))->firstWhere('id', $product->id);
+    expect($prodItem['name'])->toBe('ساندوتش كرسبي');
+
+    // 2. Fetching in English with lang=en
+    $catEn = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/categories/parents?lang=en')
+        ->assertStatus(200);
+    $itemEn = collect($catEn->json('data'))->firstWhere('id', $category->id);
+    expect($itemEn['name'])->toBe('Chicken Burger');
+
+    $prodEn = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/products?lang=en')
+        ->assertStatus(200);
+    $prodItemEn = collect($prodEn->json('data'))->firstWhere('id', $product->id);
+    expect($prodItemEn['name'])->toBe('Crispy Sandwich');
+
+    // 3. Fetching product details with Accept-Language header
+    $detailEn = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->withHeader('Accept-Language', 'en')
+        ->getJson('/api/cashier/products/'.$product->id)
+        ->assertStatus(200);
+    expect($detailEn->json('data.name'))->toBe('Crispy Sandwich')
+        ->and($detailEn->json('data.variations.0.name'))->toBe('Size')
+        ->and($detailEn->json('data.variations.0.options.0.name'))->toBe('Large');
+
+    // 4. Fetching addons with lang header
+    $addonEn = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->withHeader('lang', 'en')
+        ->getJson('/api/cashier/addons')
+        ->assertStatus(200);
+    $addonItemEn = collect($addonEn->json('data'))->firstWhere('id', $addon->id);
+    expect($addonItemEn['name'])->toBe('French Fries');
+});

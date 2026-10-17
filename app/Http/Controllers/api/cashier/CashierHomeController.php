@@ -31,6 +31,7 @@ class CashierHomeController extends Controller
     private function getLocale(Request $request): string
     {
         $lang = $request->query('lang')
+            ?? $request->input('lang')
             ?? $request->header('Accept-Language')
             ?? $request->header('lang')
             ?? app()->getLocale();
@@ -40,8 +41,18 @@ class CashierHomeController extends Controller
 
     private function getLocalized(mixed $value, string $locale): ?string
     {
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if ((str_starts_with($trimmed, '{') && str_ends_with($trimmed, '}')) || (str_starts_with($trimmed, '[') && str_ends_with($trimmed, ']'))) {
+                $decoded = json_decode($trimmed, true);
+                if (is_array($decoded)) {
+                    $value = $decoded;
+                }
+            }
+        }
+
         if (is_array($value)) {
-            return $value[$locale] ?? $value['ar'] ?? $value['en'] ?? null;
+            return $value[$locale] ?? $value['ar'] ?? $value['en'] ?? (isset($value[0]) && is_string($value[0]) ? $value[0] : null);
         }
 
         return is_string($value) ? $value : null;
@@ -677,11 +688,7 @@ class CashierHomeController extends Controller
             'branch_id' => 'sometimes|nullable|integer|exists:branches,id',
         ]);
 
-        $lang = $request->query('lang')
-            ?? $request->header('Accept-Language')
-            ?? $request->header('lang')
-            ?? app()->getLocale();
-        $locale = str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
+        $locale = $this->getLocale($request);
 
         $branchId = $request->query('branch_id') ?? auth()->user()?->branch_id;
 
@@ -695,10 +702,7 @@ class CashierHomeController extends Controller
             ->orderBy('id', 'asc')
             ->get()
             ->map(function (FinancialAccount $acc) use ($locale) {
-                $name = $acc->name;
-                $localizedName = is_array($name)
-                    ? ($name[$locale] ?? $name['ar'] ?? $name['en'] ?? '')
-                    : (string) $name;
+                $localizedName = $this->getLocalized($acc->name, $locale) ?? (string) $acc->name;
 
                 $iconUrl = null;
                 if ($acc->icon) {

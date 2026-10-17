@@ -279,7 +279,33 @@ class CashierOrderController extends Controller
              * @var string|null
              */
             'note' => 'nullable|string',
+
+            /**
+             * Financial Account ID for payment collection.
+             *
+             * @var int
+             *
+             * @example 1
+             */
+            'financial_account_id' => 'required_without:financial_id|nullable|integer|exists:financial_accounts,id',
+
+            /**
+             * Alias for financial_account_id.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'financial_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
         ]);
+
+        $financialAccountId = $validated['financial_account_id'] ?? $validated['financial_id'] ?? null;
+        if (! $financialAccountId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد الحساب المالي لإتمام الطلب',
+            ], 422);
+        }
 
         $tableId = $validated['hall_table_id'] ?? $validated['table_id'] ?? null;
 
@@ -329,12 +355,13 @@ class CashierOrderController extends Controller
         $cashier = Cashier::find($cashierId);
         $branchId = $cashier?->branch_id ?? auth()->user()?->branch_id;
 
-        $order = DB::transaction(function () use ($validated, $tableId, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
+        $order = DB::transaction(function () use ($validated, $tableId, $financialAccountId, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
             $order = Order::create([
                 'shift_id' => $openShiftId,
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
                 'hall_table_id' => $tableId,
+                'financial_account_id' => $financialAccountId,
                 'module' => $validated['module'],
                 'address' => $validated['address'] ?? null,
                 'note' => $validated['note'] ?? null,
