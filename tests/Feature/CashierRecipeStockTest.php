@@ -3,6 +3,7 @@
 use App\Models\Branch;
 use App\Models\Cashier;
 use App\Models\CashierMan;
+use App\Models\FinancialAccount;
 use App\Models\Material;
 use App\Models\MaterialStock;
 use App\Models\OrderCart;
@@ -19,6 +20,11 @@ use Tests\TestCase;
 uses(TestCase::class, RefreshDatabase::class);
 
 beforeEach(function () {
+    $this->financialAccount = FinancialAccount::create([
+        'name' => ['ar' => 'خزينة رئيسية', 'en' => 'Main Treasury'],
+        'status' => true,
+    ]);
+
     $this->branch = Branch::create([
         'name' => ['ar' => 'فرع المعادي', 'en' => 'Maadi Branch'],
         'status' => true,
@@ -226,6 +232,7 @@ test('checkout deducts from branch stock and never goes below zero', function ()
         'Authorization' => "Bearer {$this->token}",
     ])->postJson('/api/cashier/orders/checkout', [
         'module' => 'takeaway',
+        'financial_account_id' => $this->financialAccount->id,
     ]);
 
     $response->assertStatus(201)
