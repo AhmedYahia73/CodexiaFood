@@ -465,6 +465,26 @@ test('cashier can record an expense and it automatically binds cashier_id, cashi
     expect($listResponse->json('data'))->toHaveCount(1);
 });
 
+test('cashier expense store self-heals when given nonexistent financial_id or financial_account_id', function () {
+    $expenseList = ExpenseList::create([
+        'name' => ['ar' => 'صيانة طارئة', 'en' => 'Emergency Maintenance'],
+    ]);
+
+    $this->cashierMan->update(['cashier_id' => $this->cashier1->id]);
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/expenses', [
+            'expense_list_id' => $expenseList->id,
+            'financial_id' => 999999, // nonexistent ID
+            'amount' => 100.00,
+            'description' => 'إصلاح جهاز الكاشير',
+        ])
+        ->assertStatus(201)
+        ->assertJsonPath('status', true);
+
+    expect($response->json('data.financial_id'))->not->toBeNull();
+});
+
 test('endShift computes deficit using formula: orders_total - total_mony - expenses_total + start_amount', function () {
     $account = FinancialAccount::create([
         'name' => ['ar' => 'خزينة الصندوق', 'en' => 'Register Safe'],
