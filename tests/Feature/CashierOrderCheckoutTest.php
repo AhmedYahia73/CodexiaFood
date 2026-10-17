@@ -264,3 +264,29 @@ test('checkout gracefully handles invalid or nonexistent financial_account_id wi
     expect($response->json('status'))->toBeTrue();
     expect($response->json('data.financial_account_id'))->not->toBeNull();
 });
+
+test('order checkout increments financial account balance by final_price', function () {
+    $initialBalance = (float) $this->financialAccount->balance;
+
+    // Add item to takeaway cart
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $this->product->id,
+            'quantity' => 2,
+        ])
+        ->assertStatus(201);
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/orders/checkout', [
+            'module' => 'takeaway',
+            'financial_account_id' => $this->financialAccount->id,
+        ])
+        ->assertStatus(201);
+
+    $finalPrice = (float) $response->json('data.final_price');
+    expect($finalPrice)->toBeGreaterThan(0);
+
+    $this->financialAccount->refresh();
+    expect((float) $this->financialAccount->balance)->toBe(round($initialBalance + $finalPrice, 2));
+});

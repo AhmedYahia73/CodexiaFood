@@ -46,6 +46,40 @@ class Order extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::created(function (Order $order) {
+            if ($order->financial_account_id && (float) $order->final_price > 0) {
+                FinancialAccount::where('id', $order->financial_account_id)
+                    ->increment('balance', (float) $order->final_price);
+            }
+        });
+
+        static::deleted(function (Order $order) {
+            if ($order->financial_account_id && (float) $order->final_price > 0) {
+                FinancialAccount::where('id', $order->financial_account_id)
+                    ->decrement('balance', (float) $order->final_price);
+            }
+        });
+
+        static::updated(function (Order $order) {
+            if ($order->wasChanged(['final_price', 'financial_account_id'])) {
+                $originalAccountId = $order->getOriginal('financial_account_id');
+                $originalFinalPrice = (float) $order->getOriginal('final_price');
+                $newAccountId = $order->financial_account_id;
+                $newFinalPrice = (float) $order->final_price;
+
+                if ($originalAccountId && $originalFinalPrice > 0) {
+                    FinancialAccount::where('id', $originalAccountId)->decrement('balance', $originalFinalPrice);
+                }
+
+                if ($newAccountId && $newFinalPrice > 0) {
+                    FinancialAccount::where('id', $newAccountId)->increment('balance', $newFinalPrice);
+                }
+            }
+        });
+    }
+
     /**
      * Statuses that trigger KitchenOrder cleanup when set.
      */
@@ -124,4 +158,3 @@ class Order extends Model
         return $this->hasMany(KitchenOrder::class);
     }
 }
-
