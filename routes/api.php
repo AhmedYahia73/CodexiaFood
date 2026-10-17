@@ -53,6 +53,7 @@ use App\Http\Controllers\api\branch\ReportController as BranchReportController;
 use App\Http\Controllers\api\branch\ShiftController as BranchShiftController;
 use App\Http\Controllers\api\branch\WasteController as BranchWasteController;
 use App\Http\Controllers\api\cashier\CashierCartController;
+use App\Http\Controllers\api\cashier\CashierExpenseController;
 use App\Http\Controllers\api\cashier\CashierHomeController;
 use App\Http\Controllers\api\cashier\CashierOrderController;
 use App\Http\Controllers\api\kitchen\KitchenOrderController;
@@ -296,9 +297,14 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::get('addons', [CashierHomeController::class, 'addons']);
     Route::get('halls', [CashierHomeController::class, 'halls']);
     Route::get('hall-tables', [CashierHomeController::class, 'hallTables']);
+    Route::get('financial-accounts', [CashierHomeController::class, 'financialAccounts']);
     Route::post('start-shift', [CashierHomeController::class, 'startShift']);
     Route::get('check-start-shift', [CashierHomeController::class, 'checkStartShift']);
     Route::post('end-shift', [CashierHomeController::class, 'endShift']);
+
+    Route::get('expense-lists', [CashierExpenseController::class, 'expenseLists']);
+    Route::get('expenses', [CashierExpenseController::class, 'index']);
+    Route::post('expenses', [CashierExpenseController::class, 'store']);
 
     Route::delete('cart/clear', [CashierCartController::class, 'clear']);
     Route::apiResource('cart', CashierCartController::class);

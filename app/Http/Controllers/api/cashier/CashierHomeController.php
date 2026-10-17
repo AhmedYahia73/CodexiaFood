@@ -10,6 +10,8 @@ use App\Models\BusinessSetup;
 use App\Models\Cashier;
 use App\Models\CashierMan;
 use App\Models\Category;
+use App\Models\Expense;
+use App\Models\FinancialAccount;
 use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Order;
@@ -394,9 +396,58 @@ class CashierHomeController extends Controller
     public function startShift(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            /**
+             * Target cashier POS device ID.
+             *
+             * @var int
+             *
+             * @example 1
+             */
             'cashier_id' => 'required|exists:cashiers,id',
+            /**
+             * Optional cashier man user ID.
+             *
+             * @var int|null
+             */
             'cashier_man_id' => 'sometimes|nullable|exists:cashier_men,id',
+            /**
+             * Optional branch ID.
+             *
+             * @var int|null
+             */
             'branch_id' => 'sometimes|nullable|exists:branches,id',
+            /**
+             * Opening cash amount in the drawer at the start of shift.
+             *
+             * @var float|null
+             *
+             * @example 200.00
+             */
+            'start_amount' => 'sometimes|nullable|numeric|min:0',
+            /**
+             * Alias for start_amount.
+             *
+             * @var float|null
+             *
+             * @example 200.00
+             */
+            'start_mony' => 'sometimes|nullable|numeric|min:0',
+            /**
+             * The financial account associated with the shift opening.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'financial_account_id' => 'sometimes|nullable|exists:financial_accounts,id',
+            /**
+             * Alias for financial_account_id.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'financial_id' => 'sometimes|nullable|exists:financial_accounts,id',
         ]);
 
         $cashierMan = auth()->user();
@@ -441,20 +492,27 @@ class CashierHomeController extends Controller
             'cashier_man_id' => $cashierManId,
         ]);
 
+        $startAmount = round((float) ($request->input('start_amount') ?? $request->input('start_mony') ?? 0), 2);
+        $financialAccountId = $request->input('financial_account_id') ?? $request->input('financial_id');
+
         $startShift = StartShift::create([
             'start' => now(),
             'end' => null,
             'branch_id' => $branchId,
             'cashier_id' => $validated['cashier_id'],
             'cashier_man_id' => $cashierManId,
+            'start_amount' => $startAmount,
+            'financial_account_id' => $financialAccountId,
             'default_total_amount' => 0,
             'total_mony' => null,
+            'orders_total' => 0,
+            'expenses_total' => 0,
         ]);
 
         return response()->json([
             'status' => true,
             'message' => 'تم بدء الشيفت بنجاح',
-            'data' => new StartShiftResource($startShift->load(['branch', 'cashier', 'cashierMan'])),
+            'data' => new StartShiftResource($startShift->load(['branch', 'cashier', 'cashierMan', 'financialAccount'])),
         ], 201);
     }
 
@@ -494,11 +552,23 @@ class CashierHomeController extends Controller
     public function endShift(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            /**
+             * The actual cash counted in drawer by the cashier at shift end.
+             *
+             * @var float
+             *
+             * @example 1500.00
+             */
             'total_mony' => 'required|numeric|min:0',
+            /**
+             * Optional branch ID filter.
+             *
+             * @var int|null
+             */
             'branch_id' => 'sometimes|nullable|exists:branches,id',
         ]);
 
-        $totalMony = (float) $validated['total_mony'];
+        $totalMony = round((float) $validated['total_mony'], 2);
         $cashierMan = auth()->user();
         $cashierManId = $cashierMan?->id;
         $branchId = $validated['branch_id'] ?? $cashierMan?->branch_id;
@@ -518,8 +588,10 @@ class CashierHomeController extends Controller
 
         $endTime = now();
 
-        // Calculate default_total_amount automatically from orders during the shift period
+        // 1. Calculate orders total during shift: is_pos = true, status in ('delivered', 'pickup')
         $ordersQuery = Order::query()
+            ->where('is_pos', true)
+            ->whereIn('status', ['delivered', 'pickup'])
             ->where(function ($query) use ($openShift, $endTime) {
                 $query->where('shift_id', $openShift->id)
                     ->orWhere(function ($q) use ($openShift, $endTime) {
@@ -529,10 +601,29 @@ class CashierHomeController extends Controller
                     });
             });
 
-        $defaultTotalAmount = round((float) $ordersQuery->sum('final_price'), 2);
-        if ($defaultTotalAmount == 0) {
-            $defaultTotalAmount = round((float) $ordersQuery->sum('total'), 2);
+        $ordersTotal = round((float) $ordersQuery->sum('final_price'), 2);
+        if ($ordersTotal == 0) {
+            $ordersTotal = round((float) $ordersQuery->sum('total'), 2);
         }
+
+        // 2. Calculate expenses total during shift for this cashier_man
+        $expensesQuery = Expense::query()
+            ->where(function ($query) use ($openShift, $endTime) {
+                $query->where('shift_id', $openShift->id)
+                    ->orWhere(function ($q) use ($openShift, $endTime) {
+                        $q->where('cashier_man_id', $openShift->cashier_man_id)
+                            ->whereBetween('created_at', [$openShift->start, $endTime]);
+                    });
+            });
+
+        $expensesTotal = round((float) $expensesQuery->sum('amount'), 2);
+
+        // 3. Starting cash amount entered at start_shift
+        $startAmount = round((float) ($openShift->start_amount ?? 0), 2);
+
+        // 4. Expected drawer cash = start_amount + orders_total - expenses_total
+        // Deficit = default_total_amount - total_mony = orders_total - total_mony - expenses_total + start_amount
+        $defaultTotalAmount = round($startAmount + $ordersTotal - $expensesTotal, 2);
 
         Cashier::where('cashier_man_id', $cashierManId)->update([
             'cashier_man_id' => null,
@@ -540,6 +631,9 @@ class CashierHomeController extends Controller
 
         $openShift->update([
             'end' => $endTime,
+            'start_amount' => $startAmount,
+            'orders_total' => $ordersTotal,
+            'expenses_total' => $expensesTotal,
             'default_total_amount' => $defaultTotalAmount,
             'total_mony' => $totalMony,
         ]);
@@ -557,7 +651,74 @@ class CashierHomeController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'تم إنهاء الشيفت بنجاح',
-            'data' => new StartShiftResource($openShift->fresh(['branch', 'cashier', 'cashierMan'])),
+            'data' => new StartShiftResource($openShift->fresh(['branch', 'cashier', 'cashierMan', 'financialAccount'])),
+        ]);
+    }
+
+    /**
+     * Get active financial accounts for cashier.
+     */
+    public function financialAccounts(Request $request): JsonResponse
+    {
+        $request->validate([
+            /**
+             * Language code ('ar' or 'en').
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+            /**
+             * Filter by branch id.
+             *
+             * @var int|null
+             */
+            'branch_id' => 'sometimes|nullable|integer|exists:branches,id',
+        ]);
+
+        $lang = $request->query('lang')
+            ?? $request->header('Accept-Language')
+            ?? $request->header('lang')
+            ?? app()->getLocale();
+        $locale = str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
+
+        $branchId = $request->query('branch_id') ?? auth()->user()?->branch_id;
+
+        $accounts = FinancialAccount::query()
+            ->where('status', true)
+            ->when($branchId, function ($query) use ($branchId) {
+                $query->where(function ($q) use ($branchId) {
+                    $q->whereNull('branch_id')->orWhere('branch_id', $branchId);
+                });
+            })
+            ->orderBy('id', 'asc')
+            ->get()
+            ->map(function (FinancialAccount $acc) use ($locale) {
+                $name = $acc->name;
+                $localizedName = is_array($name)
+                    ? ($name[$locale] ?? $name['ar'] ?? $name['en'] ?? '')
+                    : (string) $name;
+
+                $iconUrl = null;
+                if ($acc->icon) {
+                    $iconUrl = (str_starts_with($acc->icon, 'http://') || str_starts_with($acc->icon, 'https://'))
+                        ? $acc->icon
+                        : url('storage/'.ltrim($acc->icon, '/'));
+                }
+
+                return [
+                    'id' => $acc->id,
+                    'name' => $localizedName,
+                    'icon' => $iconUrl,
+                    'balance' => (float) $acc->balance,
+                ];
+            });
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم جلب الحسابات المالية بنجاح',
+            'data' => $accounts,
         ]);
     }
 
