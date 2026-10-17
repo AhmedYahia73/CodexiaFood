@@ -636,6 +636,9 @@ class CashierHomeController extends Controller
         // Deficit = default_total_amount - total_mony = orders_total - total_mony - expenses_total + start_amount
         $defaultTotalAmount = round($startAmount + $ordersTotal - $expensesTotal, 2);
 
+        $locale = $this->getLocale($request);
+        $financialAccountsSummary = $openShift->calculateFinancialAccountsSummary($endTime, $locale);
+
         Cashier::where('cashier_man_id', $cashierManId)->update([
             'cashier_man_id' => null,
         ]);
@@ -647,6 +650,7 @@ class CashierHomeController extends Controller
             'expenses_total' => $expensesTotal,
             'default_total_amount' => $defaultTotalAmount,
             'total_mony' => $totalMony,
+            'financial_accounts_summary' => $financialAccountsSummary,
         ]);
 
         if ($cashierMan) {

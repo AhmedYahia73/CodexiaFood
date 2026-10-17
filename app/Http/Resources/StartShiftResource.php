@@ -48,6 +48,8 @@ class StartShiftResource extends JsonResource
             'financial_account_id' => $this->financial_account_id,
             'financial_id' => $this->financial_account_id,
             'financial_account' => new FinancialAccountResource($this->whenLoaded('financialAccount')),
+            'financial_accounts_summary' => $this->financial_accounts_summary ?: $this->calculateFinancialAccountsSummary(null, $locale),
+            'accounts_breakdown' => $this->financial_accounts_summary ?: $this->calculateFinancialAccountsSummary(null, $locale),
             'orders_total' => (float) ($this->orders_total ?? 0),
             'expenses_total' => (float) ($this->expenses_total ?? 0),
             'default_total_amount' => $defaultTotal,

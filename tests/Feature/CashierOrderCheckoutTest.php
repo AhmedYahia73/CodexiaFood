@@ -5,6 +5,7 @@ use App\Models\Branch;
 use App\Models\Cashier;
 use App\Models\CashierMan;
 use App\Models\Discount;
+use App\Models\FinancialAccount;
 use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Option;
@@ -59,6 +60,13 @@ beforeEach(function () {
         'hall_id' => $this->hall->id,
         'branch_id' => $this->branch->id,
         'status' => true,
+    ]);
+
+    $this->financialAccount = FinancialAccount::create([
+        'name' => ['ar' => 'الخزينة الرئيسية', 'en' => 'Main Treasury'],
+        'status' => true,
+        'branch_id' => $this->branch->id,
+        'balance' => 1000.00,
     ]);
 
     // 10% discount
@@ -131,18 +139,21 @@ test('cashier checkout creates order and related tables from cart items and clea
         ])
         ->assertStatus(201);
 
-    // Validation requires hall_table_id for dinein
+    // Validation requires hall_table_id for dinein and financial_account_id
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/orders/checkout', [
             'module' => 'dinein',
+            'hall_table_id' => $this->hallTable->id,
         ])
-        ->assertStatus(422);
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['financial_account_id']);
 
     // Successful checkout
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/orders/checkout?lang=ar', [
             'module' => 'dinein',
             'hall_table_id' => $this->hallTable->id,
+            'financial_account_id' => $this->financialAccount->id,
             'note' => 'طلب صالة عاجل',
         ])
         ->assertStatus(201)
@@ -160,6 +171,7 @@ test('cashier checkout creates order and related tables from cart items and clea
         'cashier_id' => $this->cashier->id,
         'cashier_man_id' => $this->cashierMan->id,
         'hall_table_id' => $this->hallTable->id,
+        'financial_account_id' => $this->financialAccount->id,
         'module' => 'dinein',
         'is_pos' => true,
     ]);
@@ -208,6 +220,7 @@ test('checkout validates required fields for delivery module', function () {
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/orders/checkout', [
             'module' => 'delivery',
+            'financial_account_id' => $this->financialAccount->id,
             'address' => 'شارع عباس العقاد عمارة 12',
             'phone' => '01234567890',
             'name' => 'أحمد سمير',
@@ -221,6 +234,7 @@ test('checkout fails when cart is empty for requested module', function () {
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/orders/checkout', [
             'module' => 'takeaway',
+            'financial_account_id' => $this->financialAccount->id,
         ])
         ->assertStatus(400)
         ->assertJson([

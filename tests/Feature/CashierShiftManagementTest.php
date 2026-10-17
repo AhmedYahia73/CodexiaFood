@@ -545,3 +545,131 @@ test('endShift computes deficit using formula: orders_total - total_mony - expen
         ->and((float) $freshShift->total_mony)->toBe(500.0)
         ->and((float) $freshShift->deficit)->toBe(30.0);
 });
+
+test('end shift report breaks down balances per financial account with start_amount, orders and expenses', function () {
+    $this->cashierMan->update(['cashier_id' => $this->cashier1->id]);
+
+    $accountCash = FinancialAccount::create([
+        'name' => ['ar' => 'الخزينة النقدية', 'en' => 'Cash Treasury'],
+        'status' => true,
+        'branch_id' => $this->branch->id,
+        'balance' => 1000,
+    ]);
+
+    $accountVisa = FinancialAccount::create([
+        'name' => ['ar' => 'شبكة مدى فيزا', 'en' => 'Mada Visa'],
+        'status' => true,
+        'branch_id' => $this->branch->id,
+        'balance' => 5000,
+    ]);
+
+    $expenseList = ExpenseList::create([
+        'name' => 'مشتريات خضار',
+    ]);
+
+    // Start shift with accountCash and start_amount = 200
+    $shift = StartShift::create([
+        'start' => now()->subHours(4),
+        'end' => null,
+        'branch_id' => $this->branch->id,
+        'cashier_id' => $this->cashier1->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'start_amount' => 200,
+        'financial_account_id' => $accountCash->id,
+    ]);
+
+    // Orders for Cash: 300 + 150 = 450
+    Order::create([
+        'shift_id' => $shift->id,
+        'cashier_id' => $this->cashier1->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'financial_account_id' => $accountCash->id,
+        'module' => 'dinein',
+        'is_pos' => true,
+        'status' => 'delivered',
+        'total' => 300,
+        'final_price' => 300,
+    ]);
+
+    Order::create([
+        'shift_id' => $shift->id,
+        'cashier_id' => $this->cashier1->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'financial_account_id' => $accountCash->id,
+        'module' => 'takeaway',
+        'is_pos' => true,
+        'status' => 'pickup',
+        'total' => 150,
+        'final_price' => 150,
+    ]);
+
+    // Order for Visa: 400
+    Order::create([
+        'shift_id' => $shift->id,
+        'cashier_id' => $this->cashier1->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'financial_account_id' => $accountVisa->id,
+        'module' => 'dinein',
+        'is_pos' => true,
+        'status' => 'delivered',
+        'total' => 400,
+        'final_price' => 400,
+    ]);
+
+    // Expenses: 50 from Cash, 20 from Visa
+    Expense::create([
+        'shift_id' => $shift->id,
+        'cashier_id' => $this->cashier1->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'financial_id' => $accountCash->id,
+        'expense_list_id' => $expenseList->id,
+        'amount' => 50,
+    ]);
+
+    Expense::create([
+        'shift_id' => $shift->id,
+        'cashier_id' => $this->cashier1->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'financial_id' => $accountVisa->id,
+        'expense_list_id' => $expenseList->id,
+        'amount' => 20,
+    ]);
+
+    // End shift with total_mony = 950
+    // Total start = 200, orders = 450 + 400 = 850, expenses = 50 + 20 = 70
+    // Total default_total_amount = 200 + 850 - 70 = 980
+    // Deficit = 980 - 950 = 30
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/end-shift?lang=ar', [
+            'total_mony' => 950,
+        ])
+        ->assertStatus(200)
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('data.default_total_amount', 980)
+        ->assertJsonPath('data.total_mony', 950)
+        ->assertJsonPath('data.deficit', 30);
+
+    $summary = $response->json('data.financial_accounts_summary');
+    expect($summary)->toBeArray();
+
+    $cashItem = collect($summary)->firstWhere('id', $accountCash->id);
+    expect($cashItem)->not->toBeNull()
+        ->and($cashItem['is_start_account'])->toBeTrue()
+        ->and($cashItem['start_amount'])->toBe(200)
+        ->and($cashItem['orders_total'])->toBe(450)
+        ->and($cashItem['expenses_total'])->toBe(50)
+        ->and($cashItem['expected_amount'])->toBe(600); // 200 + 450 - 50 = 600
+
+    $visaItem = collect($summary)->firstWhere('id', $accountVisa->id);
+    expect($visaItem)->not->toBeNull()
+        ->and($visaItem['is_start_account'])->toBeFalse()
+        ->and($visaItem['start_amount'])->toBe(0)
+        ->and($visaItem['orders_total'])->toBe(400)
+        ->and($visaItem['expenses_total'])->toBe(20)
+        ->and($visaItem['expected_amount'])->toBe(380); // 0 + 400 - 20 = 380
+
+    // Also check database persisted summary
+    $fresh = $shift->fresh();
+    expect($fresh->financial_accounts_summary)->toBeArray()
+        ->and(count($fresh->financial_accounts_summary))->toBeGreaterThanOrEqual(2);
+});
