@@ -3,6 +3,7 @@
 use App\Models\Admin;
 use App\Models\Branch;
 use App\Models\CashierMan;
+use App\Models\FinancialAccount;
 use App\Models\Hall;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -297,15 +298,21 @@ test('admin can perform CRUD on Discount model', function () {
 });
 
 test('admin can perform CRUD on ExpenseList model', function () {
+    $financialAccount = FinancialAccount::create([
+        'name' => ['en' => 'Main Safe', 'ar' => 'الخزينة الرئيسية'],
+    ]);
+
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/expense-lists', [
             'name' => ['en' => 'Kitchen Supplies Expense', 'ar' => 'مصروفات مستلزمات المطبخ'],
             'description' => ['en' => 'General kitchen purchases', 'ar' => 'مشتريات المطبخ العامة'],
+            'financial_id' => $financialAccount->id,
         ]);
 
     $storeResponse->assertStatus(201)
         ->assertJsonPath('data.name.en', 'Kitchen Supplies Expense')
-        ->assertJsonPath('data.name.ar', 'مصروفات مستلزمات المطبخ');
+        ->assertJsonPath('data.name.ar', 'مصروفات مستلزمات المطبخ')
+        ->assertJsonPath('data.financial_id', $financialAccount->id);
 
     $expenseListId = $storeResponse->json('data.id');
 

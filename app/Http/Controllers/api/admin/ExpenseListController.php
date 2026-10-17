@@ -13,7 +13,7 @@ class ExpenseListController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $expenseLists = ExpenseList::latest()->paginate($request->get('per_page', 15));
+        $expenseLists = ExpenseList::with('financialAccount')->latest()->paginate($request->get('per_page', 15));
 
         return ExpenseListResource::collection($expenseLists);
     }
@@ -27,9 +27,17 @@ class ExpenseListController extends Controller
             'description' => 'nullable|array:en,ar',
             'description.en' => 'nullable|string',
             'description.ar' => 'nullable|string',
+            'financial_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
+            'financial_account_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
         ]);
 
+        if (isset($validated['financial_account_id']) && ! isset($validated['financial_id'])) {
+            $validated['financial_id'] = $validated['financial_account_id'];
+        }
+        unset($validated['financial_account_id']);
+
         $expenseList = ExpenseList::create($validated);
+        $expenseList->load('financialAccount');
 
         return response()->json([
             'status' => true,
@@ -40,6 +48,8 @@ class ExpenseListController extends Controller
 
     public function show(ExpenseList $expenseList): ExpenseListResource
     {
+        $expenseList->load('financialAccount');
+
         return new ExpenseListResource($expenseList);
     }
 
@@ -52,14 +62,22 @@ class ExpenseListController extends Controller
             'description' => 'nullable|array:en,ar',
             'description.en' => 'nullable|string',
             'description.ar' => 'nullable|string',
+            'financial_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
+            'financial_account_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
         ]);
 
+        if (array_key_exists('financial_account_id', $validated) && ! array_key_exists('financial_id', $validated)) {
+            $validated['financial_id'] = $validated['financial_account_id'];
+        }
+        unset($validated['financial_account_id']);
+
         $expenseList->update($validated);
+        $expenseList->load('financialAccount');
 
         return response()->json([
             'status' => true,
             'message' => 'Expense list updated successfully.',
-            'data' => new ExpenseListResource($expenseList->fresh()),
+            'data' => new ExpenseListResource($expenseList->fresh()->load('financialAccount')),
         ]);
     }
 

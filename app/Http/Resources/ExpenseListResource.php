@@ -18,6 +18,15 @@ class ExpenseListResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'description' => $this->description,
+            'financial_id' => $this->financial_id,
+            'financial_account_id' => $this->financial_id,
+            'financial_account' => $this->whenLoaded('financialAccount', function () {
+                return $this->financialAccount ? [
+                    'id' => $this->financialAccount->id,
+                    'name' => $this->financialAccount->name,
+                    'icon' => $this->financialAccount->icon,
+                ] : null;
+            }),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

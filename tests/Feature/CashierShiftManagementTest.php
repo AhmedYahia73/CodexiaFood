@@ -383,21 +383,31 @@ test('cashier can fetch active financial accounts with localized name and icon',
     expect($enResponse->json('data.0.name'))->toBe('Cash Safe');
 });
 
-test('cashier can fetch expense lists with localized name and description', function () {
+test('cashier can fetch expense lists with localized name, description, and financial_id', function () {
+    $account = FinancialAccount::create([
+        'name' => ['ar' => 'الخزينة النقدية', 'en' => 'Cash Safe'],
+        'status' => true,
+        'branch_id' => $this->branch->id,
+    ]);
+
     ExpenseList::create([
         'name' => ['ar' => 'مصروفات نظافة', 'en' => 'Cleaning Expenses'],
         'description' => ['ar' => 'شراء مساحيق وأدوات', 'en' => 'Supplies'],
+        'financial_id' => $account->id,
     ]);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->getJson('/api/cashier/expense-lists?lang=ar')
         ->assertStatus(200)
-        ->assertJsonPath('status', true);
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('data.0.name', 'مصروفات نظافة')
+        ->assertJsonPath('data.0.financial_id', $account->id)
+        ->assertJsonPath('data.0.financial_account.name', 'الخزينة النقدية');
 
     expect($response->json('data.0.name'))->toBe('مصروفات نظافة');
 });
 
-test('cashier can record an expense and it automatically binds cashier_id, cashier_man_id, shift_id', function () {
+test('cashier can record an expense and it automatically binds cashier_id, cashier_man_id, shift_id, and inherits financial_id if omitted', function () {
     $account = FinancialAccount::create([
         'name' => ['ar' => 'درج الكاشير', 'en' => 'Cash Drawer'],
         'status' => true,
@@ -406,6 +416,7 @@ test('cashier can record an expense and it automatically binds cashier_id, cashi
 
     $expenseList = ExpenseList::create([
         'name' => ['ar' => 'صيانة سريعة', 'en' => 'Quick Maintenance'],
+        'financial_id' => $account->id,
     ]);
 
     $this->cashierMan->update(['cashier_id' => $this->cashier1->id]);
@@ -419,16 +430,17 @@ test('cashier can record an expense and it automatically binds cashier_id, cashi
         'start_amount' => 200,
     ]);
 
+    // Financial id is omitted from request, should be inherited from expenseList
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/expenses', [
             'expense_list_id' => $expenseList->id,
-            'financial_id' => $account->id,
             'amount' => 45.50,
             'description' => 'شراء لمبة جديدة',
         ])
         ->assertStatus(201)
         ->assertJsonPath('status', true)
         ->assertJsonPath('data.amount', 45.50)
+        ->assertJsonPath('data.financial_id', $account->id)
         ->assertJsonPath('data.shift_id', $shift->id)
         ->assertJsonPath('data.cashier_man_id', $this->cashierMan->id)
         ->assertJsonPath('data.cashier_id', $this->cashier1->id);
@@ -443,10 +455,12 @@ test('cashier can record an expense and it automatically binds cashier_id, cashi
 
     // Test listing expenses
     $listResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
-        ->getJson('/api/cashier/expenses')
+        ->getJson('/api/cashier/expenses?lang=ar')
         ->assertStatus(200)
         ->assertJsonPath('status', true)
-        ->assertJsonPath('total_amount', 45.50);
+        ->assertJsonPath('total_amount', 45.50)
+        ->assertJsonPath('data.0.financial_id', $account->id)
+        ->assertJsonPath('data.0.financial_account.name', 'درج الكاشير');
 
     expect($listResponse->json('data'))->toHaveCount(1);
 });

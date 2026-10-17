@@ -60,14 +60,30 @@ class CashierExpenseController extends Controller
 
         $locale = $this->getLocale($request);
 
-        $lists = ExpenseList::query()
+        $lists = ExpenseList::with('financialAccount')
             ->orderBy('id', 'asc')
             ->get()
             ->map(function (ExpenseList $item) use ($locale) {
+                $acc = $item->financialAccount;
+                $accName = $acc ? ($this->getLocalized($acc->name, $locale) ?? (string) $acc->name) : null;
+                $iconUrl = null;
+                if ($acc && $acc->icon) {
+                    $iconUrl = (str_starts_with($acc->icon, 'http://') || str_starts_with($acc->icon, 'https://'))
+                        ? $acc->icon
+                        : url('storage/'.ltrim($acc->icon, '/'));
+                }
+
                 return [
                     'id' => $item->id,
                     'name' => $this->getLocalized($item->name, $locale) ?? (string) $item->name,
                     'description' => $this->getLocalized($item->description, $locale),
+                    'financial_id' => $item->financial_id,
+                    'financial_account_id' => $item->financial_id,
+                    'financial_account' => $acc ? [
+                        'id' => $acc->id,
+                        'name' => $accName,
+                        'icon' => $iconUrl,
+                    ] : null,
                 ];
             });
 
@@ -103,16 +119,47 @@ class CashierExpenseController extends Controller
         $locale = $this->getLocale($request);
         $branchId = $request->query('branch_id') ?? auth()->user()?->branch_id;
 
-        $accounts = FinancialAccount::query()
-            ->where('status', true)
+        $accountsQuery = FinancialAccount::query()
+            ->where(function ($q) {
+                $q->where('status', true)->orWhereNull('status');
+            })
             ->when($branchId, function ($query) use ($branchId) {
                 $query->where(function ($q) use ($branchId) {
                     $q->whereNull('branch_id')->orWhere('branch_id', $branchId);
                 });
             })
             ->orderBy('id', 'asc')
-            ->get()
-            ->map(function (FinancialAccount $acc) use ($locale) {
+            ->get();
+
+        // Fallback 1: If no accounts found for this specific branch, load all active accounts across branches
+        if ($accountsQuery->isEmpty()) {
+            $accountsQuery = FinancialAccount::query()
+                ->where(function ($q) {
+                    $q->where('status', true)->orWhereNull('status');
+                })
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        // Fallback 2: If still empty, check if any accounts exist regardless of status
+        if ($accountsQuery->isEmpty()) {
+            $accountsQuery = FinancialAccount::query()
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        // Fallback 3: If table has no accounts at all, create a default cash treasury account
+        if ($accountsQuery->isEmpty()) {
+            $defaultAcc = FinancialAccount::create([
+                'name' => ['ar' => 'الخزينة النقدية الرئيسية', 'en' => 'Main Cash Treasury'],
+                'status' => true,
+                'balance' => 0.00,
+                'branch_id' => $branchId,
+            ]);
+            $accountsQuery = collect([$defaultAcc]);
+        }
+
+        $accounts = $accountsQuery->map(function (FinancialAccount $acc) use ($locale) {
                 $name = $acc->name;
                 $localizedName = is_array($name)
                     ? ($name[$locale] ?? $name['ar'] ?? $name['en'] ?? '')
@@ -199,12 +246,26 @@ class CashierExpenseController extends Controller
                     ? ($accountName[$locale] ?? $accountName['ar'] ?? $accountName['en'] ?? '')
                     : (string) $accountName;
 
+                $acc = $expense->financialAccount;
+                $iconUrl = null;
+                if ($acc && $acc->icon) {
+                    $iconUrl = (str_starts_with($acc->icon, 'http://') || str_starts_with($acc->icon, 'https://'))
+                        ? $acc->icon
+                        : url('storage/'.ltrim($acc->icon, '/'));
+                }
+
                 return [
                     'id' => $expense->id,
                     'expense_list_id' => $expense->expense_list_id,
                     'expense_list_name' => $localizedListName,
                     'financial_id' => $expense->financial_id,
+                    'financial_account_id' => $expense->financial_id,
                     'financial_account_name' => $localizedAccountName,
+                    'financial_account' => $acc ? [
+                        'id' => $acc->id,
+                        'name' => $localizedAccountName,
+                        'icon' => $iconUrl,
+                    ] : null,
                     'amount' => (float) $expense->amount,
                     'description' => $expense->description,
                     'shift_id' => $expense->shift_id,
@@ -276,7 +337,8 @@ class CashierExpenseController extends Controller
             'note' => 'sometimes|nullable|string',
         ]);
 
-        $financialId = $request->input('financial_id') ?? $request->input('financial_account_id');
+        $expenseList = ExpenseList::find($validated['expense_list_id']);
+        $financialId = $request->input('financial_id') ?? $request->input('financial_account_id') ?? $expenseList?->financial_id;
         if (! $financialId) {
             return response()->json([
                 'status' => false,
