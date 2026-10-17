@@ -450,7 +450,7 @@ class CashierHomeController extends Controller
              *
              * @example 1
              */
-            'financial_account_id' => 'sometimes|nullable|exists:financial_accounts,id',
+            'financial_account_id' => 'sometimes|nullable|integer',
             /**
              * Alias for financial_account_id.
              *
@@ -458,7 +458,7 @@ class CashierHomeController extends Controller
              *
              * @example 1
              */
-            'financial_id' => 'sometimes|nullable|exists:financial_accounts,id',
+            'financial_id' => 'sometimes|nullable|integer',
         ]);
 
         $cashierMan = auth()->user();
@@ -505,6 +505,29 @@ class CashierHomeController extends Controller
 
         $startAmount = round((float) ($request->input('start_amount') ?? $request->input('start_mony') ?? 0), 2);
         $financialAccountId = $request->input('financial_account_id') ?? $request->input('financial_id');
+
+        if ($financialAccountId && ! FinancialAccount::where('id', $financialAccountId)->exists()) {
+            $financialAccountId = null;
+        }
+
+        if (! $financialAccountId) {
+            $financialAccountId = FinancialAccount::query()
+                ->where('status', true)
+                ->when($branchId, fn ($q) => $q->whereNull('branch_id')->orWhere('branch_id', $branchId))
+                ->value('id')
+                ?? FinancialAccount::where('status', true)->value('id')
+                ?? FinancialAccount::value('id');
+
+            if (! $financialAccountId) {
+                $defaultAcc = FinancialAccount::create([
+                    'name' => ['ar' => 'الخزينة النقدية الرئيسية', 'en' => 'Main Cash Treasury'],
+                    'status' => true,
+                    'balance' => 0.00,
+                    'branch_id' => $branchId,
+                ]);
+                $financialAccountId = $defaultAcc->id;
+            }
+        }
 
         $startShift = StartShift::create([
             'start' => now(),
