@@ -698,8 +698,7 @@ class CashierOrderController extends Controller
     {
         $validated = $request->validate([
             'order_ids' => 'sometimes|array|min:1',
-            'order_ids.*' => 'integer|exists:orders,id',
-            'orders' => 'sometimes|array|min:1',
+            'order_ids.*' => 'integer|exists:orders,id', 
         ]);
 
         $orderIds = $validated['order_ids'] ?? [];
