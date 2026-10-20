@@ -56,7 +56,9 @@ class FinancialAccountController extends BaseBranchController
             'name' => 'required|array:en,ar',
             'name.en' => 'required|string|max:255',
             'name.ar' => 'required|string|max:255',
-            'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'icon' => $request->hasFile('icon')
+                ? 'nullable|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
+                : 'nullable|string|max:500',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',
             'is_cash' => 'sometimes|nullable|boolean',
@@ -64,6 +66,12 @@ class FinancialAccountController extends BaseBranchController
         ]);
 
         $iconPath = $this->upload($request, 'icon', 'financial_accounts');
+        if (! $iconPath && $request->filled('icon') && is_string($request->input('icon'))) {
+            $inputIcon = $request->input('icon');
+            if (! str_starts_with($inputIcon, 'http://') && ! str_starts_with($inputIcon, 'https://')) {
+                $iconPath = $inputIcon;
+            }
+        }
 
         $account = FinancialAccount::create([
             'name' => $validated['name'],
@@ -107,7 +115,9 @@ class FinancialAccountController extends BaseBranchController
             'name' => 'sometimes|required|array:en,ar',
             'name.en' => 'required_with:name|string|max:255',
             'name.ar' => 'required_with:name|string|max:255',
-            'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'icon' => $request->hasFile('icon')
+                ? 'nullable|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
+                : 'nullable|string|max:500',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',
             'is_cash' => 'sometimes|nullable|boolean',
@@ -126,6 +136,11 @@ class FinancialAccountController extends BaseBranchController
                 $this->deleteImage($financialAccount->icon);
             }
             $dataToUpdate['icon'] = $this->upload($request, 'icon', 'financial_accounts');
+        } elseif ($request->filled('icon') && is_string($request->input('icon'))) {
+            $inputIcon = $request->input('icon');
+            if (! str_starts_with($inputIcon, 'http://') && ! str_starts_with($inputIcon, 'https://')) {
+                $dataToUpdate['icon'] = $inputIcon;
+            }
         }
 
         $dataToUpdate['branch_id'] = $branchId;

@@ -359,14 +359,17 @@ test('admin can perform CRUD on FinancialAccount model with storage icon URL & b
 
     $accountId = $storeResponse->json('data.id');
 
-    // Update is_cash
+    // Update with string icon (e.g. existing URL sent by frontend)
     $updateResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->putJson("/api/admin/financial-accounts/{$accountId}", [
+            'icon' => $iconUrl,
             'is_cash' => true,
+            'balance' => 6000,
         ]);
 
     $updateResponse->assertStatus(200)
-        ->assertJsonPath('data.is_cash', true);
+        ->assertJsonPath('data.is_cash', true)
+        ->assertJsonPath('data.balance', 6000);
 
     // Show returns is_cash
     $this->withHeader('Authorization', 'Bearer '.$this->token)
