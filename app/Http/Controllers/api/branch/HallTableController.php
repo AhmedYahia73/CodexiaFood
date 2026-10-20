@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\api\branch;
 
-use App\Http\Controllers\api\branch\BaseBranchController;
 use App\Http\Resources\HallTableResource;
 use App\Models\Branch;
 use App\Models\BusinessSetup;
@@ -63,7 +62,7 @@ class HallTableController extends BaseBranchController
             'name' => 'required|string|max:255',
             'branch_id' => 'sometimes|nullable|integer',
             'hall_id' => 'required|exists:halls,id',
-            'status' => 'required|boolean', 
+            'status' => 'required|boolean',
         ]);
 
         $hall = Hall::find($validated['hall_id']);

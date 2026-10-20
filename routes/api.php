@@ -93,6 +93,7 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('cashier-men/select-options', [CashierManController::class, 'selectOptions']);
     Route::get('cashiers/select-options', [CashierController::class, 'selectOptions']);
     Route::get('deliveries/select-options', [DeliveryController::class, 'selectOptions']);
+    Route::get('deliveries/select', [DeliveryController::class, 'select']);
     Route::get('categories/select-options', [CategoryController::class, 'selectOptions']);
     Route::get('financial-accounts/select-options', [FinancialAccountController::class, 'selectOptions']);
     Route::get('halls/select-options', [HallController::class, 'selectOptions']);
@@ -208,6 +209,7 @@ Route::middleware(['auth:branch', 'role:branch'])->prefix('branch')->group(funct
     Route::get('cashier-men/select-options', [BranchCashierManController::class, 'selectOptions']);
     Route::get('cashiers/select-options', [BranchCashierController::class, 'selectOptions']);
     Route::get('deliveries/select-options', [BranchDeliveryController::class, 'selectOptions']);
+    Route::get('deliveries/select', [BranchDeliveryController::class, 'select']);
     Route::get('financial-accounts/select-options', [BranchFinancialAccountController::class, 'selectOptions']);
     Route::get('halls/select-options', [BranchHallController::class, 'selectOptions']);
     Route::get('hall-tables/select-options', [BranchHallTableController::class, 'selectOptions']);
@@ -310,6 +312,11 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::apiResource('cart', CashierCartController::class);
 
     Route::post('orders/checkout', [CashierOrderController::class, 'checkout']);
+    Route::match(['put', 'patch', 'post'], 'orders/{order}/status', [CashierOrderController::class, 'updateStatus']);
+    Route::get('deliveries/select', [CashierOrderController::class, 'deliveriesSelect']);
+    Route::get('deliveries', [CashierOrderController::class, 'deliveriesSelect']);
+    Route::get('delivery-orders/unpaid', [CashierOrderController::class, 'unpaidDeliveries']);
+    Route::post('delivery-orders/settle-payment', [CashierOrderController::class, 'settleDeliveryOrdersPayment']);
     Route::apiResource('orders', CashierOrderController::class)->only(['index', 'show']);
     Route::get('business-setup', [CashierHomeController::class, 'businessSetup']);
 });

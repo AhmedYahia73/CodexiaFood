@@ -25,6 +25,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class OrderController extends BaseBranchController
 {
@@ -479,9 +480,20 @@ class OrderController extends BaseBranchController
 
         $validated = $request->validate([
             'status' => ['required', 'string', 'in:'.implode(',', $allowedStatuses)],
+            'delivery_id' => [
+                Rule::requiredIf(fn () => $order->module === 'delivery' && $request->input('status') === 'out_of_delivery'),
+                'nullable',
+                'integer',
+                'exists:deliveries,id',
+            ],
         ]);
 
-        $order->update(['status' => $validated['status']]);
+        $updateData = ['status' => $validated['status']];
+        if (array_key_exists('delivery_id', $validated) && ! is_null($validated['delivery_id'])) {
+            $updateData['delivery_id'] = $validated['delivery_id'];
+        }
+
+        $order->update($updateData);
 
         return response()->json([
             'status' => true,
@@ -489,6 +501,7 @@ class OrderController extends BaseBranchController
             'data' => [
                 'id' => $order->id,
                 'status' => $order->status,
+                'delivery_id' => $order->delivery_id,
             ],
         ]);
     }

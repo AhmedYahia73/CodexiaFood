@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api\cashier;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Models\Cashier;
+use App\Models\Delivery;
 use App\Models\FinancialAccount;
 use App\Models\MaterialStock;
 use App\Models\Order;
@@ -22,6 +23,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class CashierOrderController extends Controller
 {
@@ -578,5 +580,194 @@ class CashierOrderController extends Controller
             'message' => 'تم إنشاء الطلب بنجاح من السلة',
             'data' => new OrderResource($order),
         ], 201);
+    }
+
+    /**
+     * Get list of delivery drivers (id and name only) for cashier dropdowns.
+     */
+    public function deliveriesSelect(Request $request): JsonResponse
+    {
+        $branchId = auth()->user()?->branch_id;
+
+        $deliveries = Delivery::when($branchId, function ($q) use ($branchId) {
+            $q->where(function ($sub) use ($branchId) {
+                $sub->where('branch_id', $branchId)->orWhereNull('branch_id');
+            });
+        })->select('id', 'name')->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => $deliveries,
+        ]);
+    }
+
+    /**
+     * Update order status with module-specific allowed transitions.
+     * When status is out_of_delivery and module is delivery, delivery_id is required.
+     */
+    public function updateStatus(Request $request, Order $order): JsonResponse
+    {
+        $allowedStatuses = Order::$allowedStatusTransitions[$order->module] ?? [];
+
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'in:'.implode(',', $allowedStatuses)],
+            'delivery_id' => [
+                Rule::requiredIf(fn () => $order->module === 'delivery' && $request->input('status') === 'out_of_delivery'),
+                'nullable',
+                'integer',
+                'exists:deliveries,id',
+            ],
+        ]);
+
+        $updateData = ['status' => $validated['status']];
+        if (array_key_exists('delivery_id', $validated) && ! is_null($validated['delivery_id'])) {
+            $updateData['delivery_id'] = $validated['delivery_id'];
+        }
+
+        $order->update($updateData);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم تحديث حالة الطلب بنجاح.',
+            'data' => [
+                'id' => $order->id,
+                'status' => $order->status,
+                'delivery_id' => $order->delivery_id,
+            ],
+        ]);
+    }
+
+    /**
+     * List unpaid delivery orders (module = delivery and paid = false) with pagination and delivery_id filter.
+     */
+    public function unpaidDeliveries(Request $request): AnonymousResourceCollection
+    {
+        $validated = $request->validate([
+            'delivery_id' => 'sometimes|nullable|integer|exists:deliveries,id',
+            'search' => 'sometimes|nullable|string|max:255',
+            'page' => 'sometimes|nullable|integer|min:1',
+            'per_page' => 'sometimes|nullable|integer|min:1|max:100',
+        ]);
+
+        $branchId = auth()->user()?->branch_id;
+        $perPage = (int) ($validated['per_page'] ?? $request->get('per_page', 15));
+
+        $query = Order::with([
+            'delivery',
+            'shift',
+            'cashier',
+            'cashierMan',
+            'financialAccount',
+            'paymentMethod',
+            'orderProducts.product',
+        ])
+            ->where('module', 'delivery')
+            ->where('paid', false)
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->latest();
+
+        if (! empty($validated['delivery_id'])) {
+            $query->where('delivery_id', $validated['delivery_id']);
+        }
+
+        if (! empty($validated['search'])) {
+            $search = trim((string) $validated['search']);
+            $cleanOrderNum = ltrim($search, '#');
+            $query->where(function ($sub) use ($search, $cleanOrderNum) {
+                if (is_numeric($cleanOrderNum)) {
+                    $sub->orWhere('id', (int) $cleanOrderNum);
+                }
+                $sub->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%");
+            });
+        }
+
+        $orders = $query->paginate($perPage);
+
+        return OrderResource::collection($orders)->additional([
+            'status' => true,
+        ]);
+    }
+
+    /**
+     * Settle payment for a batch of delivery orders.
+     * Updates: paid = true, cashier_id = auth()->cashier_id, cashier_man_id = auth()->id, shift_id = auth()->shift_id.
+     */
+    public function settleDeliveryOrdersPayment(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'order_ids' => 'sometimes|array|min:1',
+            'order_ids.*' => 'integer|exists:orders,id',
+            'orders' => 'sometimes|array|min:1',
+        ]);
+
+        $orderIds = $validated['order_ids'] ?? [];
+        if (empty($orderIds) && ! empty($validated['orders'])) {
+            $raw = $validated['orders'];
+            $orderIds = is_array($raw[0] ?? null)
+                ? collect($raw)->pluck('id')->filter()->all()
+                : $raw;
+        }
+
+        if (empty($orderIds)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد أرقام الطلبات المراد تسوية دفعها',
+            ], 422);
+        }
+
+        $cashierUser = auth()->user();
+        $cashierManId = auth()->id();
+        $cashierId = $cashierUser?->cashier_id;
+        $branchId = $cashierUser?->branch_id;
+
+        // Resolve active shift id
+        $shiftId = StartShift::where('cashier_man_id', $cashierManId)
+            ->whereNull('end')
+            ->latest('start')
+            ->value('shift_id')
+            ?? $cashierUser?->shift_id;
+
+        $ordersToUpdate = Order::whereIn('id', $orderIds)
+            ->where('module', 'delivery')
+            ->where('paid', false)
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        if ($ordersToUpdate->isEmpty()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'لم يتم العثور على طلبات توصيل غير مدفوعة مطابقة للأرقام المحددة',
+            ], 404);
+        }
+
+        $settledIds = [];
+        $totalCollected = 0.0;
+
+        DB::transaction(function () use ($ordersToUpdate, $cashierId, $cashierManId, $shiftId, &$settledIds, &$totalCollected) {
+            foreach ($ordersToUpdate as $order) {
+                $order->update([
+                    'paid' => true,
+                    'cashier_id' => $cashierId ?? $order->cashier_id,
+                    'cashier_man_id' => $cashierManId,
+                    'shift_id' => $shiftId ?? $order->shift_id,
+                ]);
+                $settledIds[] = $order->id;
+                $totalCollected += (float) $order->final_price;
+            }
+        });
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم تحصيل وتسوية حساب طلبات التوصيل بنجاح',
+            'data' => [
+                'settled_count' => count($settledIds),
+                'settled_order_ids' => $settledIds,
+                'total_amount_collected' => $totalCollected,
+                'cashier_id' => $cashierId,
+                'cashier_man_id' => $cashierManId,
+                'shift_id' => $shiftId,
+            ],
+        ]);
     }
 }

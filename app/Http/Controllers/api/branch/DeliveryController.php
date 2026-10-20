@@ -22,7 +22,27 @@ class DeliveryController extends BaseBranchController
             'status' => true,
             'data' => [
                 'branches' => Branch::where('id', $branchId)->select('id', 'name')->get(),
+                'deliveries' => Delivery::where(function ($q) use ($branchId) {
+                    $q->where('branch_id', $branchId)->orWhereNull('branch_id');
+                })->select('id', 'name')->get(),
             ],
+        ]);
+    }
+
+    /**
+     * Return deliveries id and name strictly for select dropdowns.
+     */
+    public function select(): JsonResponse
+    {
+        $branchId = $this->getBranchId();
+
+        $deliveries = Delivery::where(function ($q) use ($branchId) {
+            $q->where('branch_id', $branchId)->orWhereNull('branch_id');
+        })->select('id', 'name')->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => $deliveries,
         ]);
     }
 

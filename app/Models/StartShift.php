@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -124,7 +125,7 @@ class StartShift extends Model
      *
      * @return array<int, array<string, mixed>>
      */
-    public function calculateFinancialAccountsSummary(?\Carbon\CarbonInterface $endTime = null, string $locale = 'ar'): array
+    public function calculateFinancialAccountsSummary(?CarbonInterface $endTime = null, string $locale = 'ar'): array
     {
         $endTime = $endTime ?? $this->end ?? now();
         $branchId = $this->branch_id;
@@ -238,4 +239,3 @@ class StartShift extends Model
         return $summary;
     }
 }
-

@@ -21,7 +21,25 @@ class DeliveryController extends Controller
             'status' => true,
             'data' => [
                 'branches' => Branch::select('id', 'name')->get(),
+                'deliveries' => Delivery::select('id', 'name')->get(),
             ],
+        ]);
+    }
+
+    /**
+     * Return deliveries id and name strictly for select dropdowns.
+     */
+    public function select(Request $request): JsonResponse
+    {
+        $deliveries = Delivery::when($request->filled('branch_id'), function ($q) use ($request) {
+            $q->where(function ($sub) use ($request) {
+                $sub->where('branch_id', $request->branch_id)->orWhereNull('branch_id');
+            });
+        })->select('id', 'name')->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => $deliveries,
         ]);
     }
 

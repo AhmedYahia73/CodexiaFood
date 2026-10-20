@@ -5,9 +5,9 @@ namespace App\Http\Controllers\api\admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\HallTableResource;
 use App\Models\Branch;
+use App\Models\BusinessSetup;
 use App\Models\Hall;
 use App\Models\HallTable;
-use App\Models\BusinessSetup;
 use App\Services\QrCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -48,7 +48,7 @@ class HallTableController extends Controller
             'name' => 'required|string|max:255',
             'branch_id' => 'required|exists:branches,id',
             'hall_id' => 'required|exists:halls,id',
-            'status' => 'required|boolean', 
+            'status' => 'required|boolean',
         ]);
 
         $validated['base_url'] = BusinessSetup::first()?->table_order_url ?? $request->get('base_url', '');
