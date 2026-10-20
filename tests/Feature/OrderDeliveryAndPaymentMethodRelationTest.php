@@ -444,6 +444,42 @@ test('cashier can list unpaid delivery orders with pagination and delivery_id fi
         'final_price' => 300,
     ]);
 
+    // Order 4: Status return (should NOT appear)
+    $orderReturn = Order::create([
+        'module' => 'delivery',
+        'status' => 'return',
+        'branch_id' => $this->branch->id,
+        'delivery_id' => $this->delivery->id,
+        'financial_account_id' => $this->financialAccountCash->id,
+        'is_pos' => true,
+        'total' => 110,
+        'final_price' => 110,
+    ]);
+
+    // Order 5: Status failed_to_delivered (should NOT appear)
+    $orderFailed = Order::create([
+        'module' => 'delivery',
+        'status' => 'failed_to_delivered',
+        'branch_id' => $this->branch->id,
+        'delivery_id' => $this->delivery->id,
+        'financial_account_id' => $this->financialAccountCash->id,
+        'is_pos' => true,
+        'total' => 115,
+        'final_price' => 115,
+    ]);
+
+    // Order 6: Status faild_to_delivered (should NOT appear)
+    $orderFaild = Order::create([
+        'module' => 'delivery',
+        'status' => 'faild_to_delivered',
+        'branch_id' => $this->branch->id,
+        'delivery_id' => $this->delivery->id,
+        'financial_account_id' => $this->financialAccountCash->id,
+        'is_pos' => true,
+        'total' => 125,
+        'final_price' => 125,
+    ]);
+
     // 1. Unfiltered request (returns both unpaid orders 1 & 2)
     $listRes = $this->withHeader('Authorization', 'Bearer '.$cashierToken)
         ->getJson('/api/cashier/delivery-orders/unpaid?per_page=10');
@@ -454,7 +490,10 @@ test('cashier can list unpaid delivery orders with pagination and delivery_id fi
     $ids = collect($listRes->json('data'))->pluck('id')->all();
     expect($ids)->toContain($order1->id)
         ->and($ids)->toContain($order2->id)
-        ->and($ids)->not->toContain($order3->id);
+        ->and($ids)->not->toContain($order3->id)
+        ->and($ids)->not->toContain($orderReturn->id)
+        ->and($ids)->not->toContain($orderFailed->id)
+        ->and($ids)->not->toContain($orderFaild->id);
 
     // 2. Filtered by delivery_id of driver 1
     $filteredRes = $this->withHeader('Authorization', 'Bearer '.$cashierToken)

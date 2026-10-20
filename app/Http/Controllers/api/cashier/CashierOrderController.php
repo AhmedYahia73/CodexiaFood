@@ -663,6 +663,7 @@ class CashierOrderController extends Controller
         ])
             ->where('module', 'delivery')
             ->where('paid', false)
+            ->whereNotIn('status', ['return', 'failed_to_delivered', 'faild_to_delivered'])
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
             ->latest();
 
@@ -731,6 +732,7 @@ class CashierOrderController extends Controller
         $ordersToUpdate = Order::whereIn('id', $orderIds)
             ->where('module', 'delivery')
             ->where('paid', false)
+            ->whereNotIn('status', ['return', 'failed_to_delivered', 'faild_to_delivered'])
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
             ->get();
 
