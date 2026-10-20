@@ -29,6 +29,7 @@ class FinancialAccountResource extends JsonResource
             'icon' => $iconUrl,
             'balance' => (float) $this->balance,
             'status' => (bool) $this->status,
+            'is_cash' => (bool) $this->is_cash,
             'branch_id' => $this->branch_id,
             'branch' => $this->relationLoaded('branch') && $this->branch ? [
                 'id' => $this->branch->id,

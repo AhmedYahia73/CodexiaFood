@@ -59,6 +59,7 @@ class FinancialAccountController extends BaseBranchController
             'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',
+            'is_cash' => 'sometimes|nullable|boolean',
             'branch_id' => 'sometimes|nullable|integer',
         ]);
 
@@ -69,6 +70,7 @@ class FinancialAccountController extends BaseBranchController
             'icon' => $iconPath,
             'balance' => $validated['balance'] ?? 0,
             'status' => $validated['status'] ?? true,
+            'is_cash' => (bool) ($validated['is_cash'] ?? false),
             'branch_id' => $branchId,
         ]);
 
@@ -108,6 +110,7 @@ class FinancialAccountController extends BaseBranchController
             'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',
+            'is_cash' => 'sometimes|nullable|boolean',
             'branch_id' => 'sometimes|nullable|integer',
         ]);
 
@@ -115,6 +118,7 @@ class FinancialAccountController extends BaseBranchController
             'name' => $validated['name'] ?? null,
             'balance' => $validated['balance'] ?? null,
             'status' => $request->has('status') ? $validated['status'] : null,
+            'is_cash' => $request->has('is_cash') ? (bool) $validated['is_cash'] : null,
         ], fn ($val) => ! is_null($val));
 
         if ($request->hasFile('icon')) {

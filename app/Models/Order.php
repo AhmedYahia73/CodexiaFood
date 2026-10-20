@@ -17,6 +17,8 @@ class Order extends Model
         'cashier_man_id',
         'hall_table_id',
         'financial_account_id',
+        'delivery_id',
+        'payment_method_id',
         'branch_id',
         'module',
         'address',
@@ -26,6 +28,7 @@ class Order extends Model
         'phone',
         'name',
         'is_pos',
+        'paid',
         'status',
         'total',
         'total_tax',
@@ -37,6 +40,7 @@ class Order extends Model
     {
         return [
             'is_pos' => 'boolean',
+            'paid' => 'boolean',
             'lat' => 'float',
             'lng' => 'float',
             'total' => 'decimal:2',
@@ -48,6 +52,12 @@ class Order extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (Order $order) {
+            if (! array_key_exists('paid', $order->attributes) || $order->attributes['paid'] === null) {
+                $order->paid = $order->determinePaidStatus();
+            }
+        });
+
         static::created(function (Order $order) {
             if ($order->financial_account_id && (float) $order->final_price > 0) {
                 FinancialAccount::where('id', $order->financial_account_id)
@@ -130,6 +140,35 @@ class Order extends Model
     public function financialAccount(): BelongsTo
     {
         return $this->belongsTo(FinancialAccount::class, 'financial_account_id');
+    }
+
+    public function delivery(): BelongsTo
+    {
+        return $this->belongsTo(Delivery::class);
+    }
+
+    public function paymentMethod(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
+
+    /**
+     * Determine whether the order should be considered paid.
+     * paid = false if payment method or financial account is_cash true and module = delivery, else true.
+     */
+    public function determinePaidStatus(): bool
+    {
+        $isDelivery = ($this->module === 'delivery');
+
+        $isCash = false;
+        if ($this->financial_account_id) {
+            $isCash = (bool) FinancialAccount::where('id', $this->financial_account_id)->value('is_cash');
+        }
+        if ($this->payment_method_id) {
+            $isCash = $isCash || (bool) PaymentMethod::where('id', $this->payment_method_id)->value('is_cash');
+        }
+
+        return ! ($isCash && $isDelivery);
     }
 
     /**

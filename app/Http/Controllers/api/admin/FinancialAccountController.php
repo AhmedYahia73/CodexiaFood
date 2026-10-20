@@ -45,6 +45,7 @@ class FinancialAccountController extends Controller
             'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',
+            'is_cash' => 'required|boolean',
             'branch_id' => 'nullable|exists:branches,id',
         ]);
 
@@ -55,6 +56,7 @@ class FinancialAccountController extends Controller
             'icon' => $iconPath,
             'balance' => $validated['balance'] ?? 0,
             'status' => $validated['status'] ?? true,
+            'is_cash' => (bool) $validated['is_cash'],
             'branch_id' => $validated['branch_id'] ?? null,
         ]);
 
@@ -88,6 +90,7 @@ class FinancialAccountController extends Controller
             'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
             'balance' => 'nullable|numeric',
             'status' => 'nullable|boolean',
+            'is_cash' => 'sometimes|required|boolean',
             'branch_id' => 'nullable|exists:branches,id',
         ]);
 
@@ -95,6 +98,7 @@ class FinancialAccountController extends Controller
             'name' => $validated['name'] ?? null,
             'balance' => $validated['balance'] ?? null,
             'status' => $request->has('status') ? $validated['status'] : null,
+            'is_cash' => $request->has('is_cash') ? (bool) $validated['is_cash'] : null,
             'branch_id' => $request->has('branch_id') ? $validated['branch_id'] : null,
         ], fn ($val) => ! is_null($val));
 

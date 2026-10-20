@@ -30,6 +30,7 @@ test('admin can fetch select-options returning payment methods with id, name, ic
         'name' => ['ar' => 'كاش', 'en' => 'Cash'],
         'icon' => 'payment_methods/cash.png',
         'status' => true,
+        'is_cash' => true,
     ]);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
@@ -41,12 +42,13 @@ test('admin can fetch select-options returning payment methods with id, name, ic
             'status',
             'data' => [
                 'payment_methods' => [
-                    '*' => ['id', 'name', 'icon', 'status'],
+                    '*' => ['id', 'name', 'icon', 'status', 'is_cash'],
                 ],
             ],
         ]);
 
     expect($response->json('data.payment_methods'))->toHaveCount(1);
+    expect($response->json('data.payment_methods.0.is_cash'))->toBeTrue();
 });
 
 test('admin can perform full CRUD on PaymentMethod with image upload for icon', function () {
@@ -67,6 +69,7 @@ test('admin can perform full CRUD on PaymentMethod with image upload for icon', 
             ],
             'icon' => $iconImage,
             'status' => true,
+            'is_cash' => false,
         ]);
 
     $storeResponse->assertStatus(201)
@@ -75,6 +78,7 @@ test('admin can perform full CRUD on PaymentMethod with image upload for icon', 
         ->assertJsonPath('data.name.en', 'Credit Card')
         ->assertJsonPath('data.description.ar', 'فيزا أو ماستركارد')
         ->assertJsonPath('data.status', true)
+        ->assertJsonPath('data.is_cash', false)
         ->assertJsonStructure([
             'status',
             'message',
@@ -84,6 +88,7 @@ test('admin can perform full CRUD on PaymentMethod with image upload for icon', 
                 'description',
                 'icon',
                 'status',
+                'is_cash',
                 'created_at',
                 'updated_at',
             ],
@@ -94,6 +99,7 @@ test('admin can perform full CRUD on PaymentMethod with image upload for icon', 
     $createdPaymentMethod = PaymentMethod::findOrFail($paymentMethodId);
 
     expect($createdPaymentMethod->icon)->not->toBeNull();
+    expect($createdPaymentMethod->is_cash)->toBeFalse();
     Storage::disk('public')->assertExists($createdPaymentMethod->icon);
 
     // 2. Read (Show)
@@ -104,6 +110,7 @@ test('admin can perform full CRUD on PaymentMethod with image upload for icon', 
         ->assertJsonPath('status', true)
         ->assertJsonPath('data.id', $paymentMethodId)
         ->assertJsonPath('data.name.en', 'Credit Card')
+        ->assertJsonPath('data.is_cash', false)
         ->assertJsonStructure(['select_options' => ['payment_methods']]);
 
     // 3. Update with new image upload
@@ -118,17 +125,20 @@ test('admin can perform full CRUD on PaymentMethod with image upload for icon', 
             ],
             'icon' => $newIconImage,
             'status' => false,
+            'is_cash' => true,
         ]);
 
     $updateResponse->assertStatus(200)
         ->assertJsonPath('status', true)
         ->assertJsonPath('data.name.ar', 'بطاقة بنكية ذكية')
-        ->assertJsonPath('data.status', false);
+        ->assertJsonPath('data.status', false)
+        ->assertJsonPath('data.is_cash', true);
 
     $updatedPaymentMethod = PaymentMethod::findOrFail($paymentMethodId);
     $newIconPath = $updatedPaymentMethod->icon;
 
     expect($newIconPath)->not->toBe($oldIconPath);
+    expect($updatedPaymentMethod->is_cash)->toBeTrue();
     Storage::disk('public')->assertMissing($oldIconPath);
     Storage::disk('public')->assertExists($newIconPath);
 
@@ -150,19 +160,35 @@ test('admin can create PaymentMethod using simple string name and icon path', fu
             'description' => 'Mobile cash wallet payment',
             'icon' => 'payment_methods/vodafone.png',
             'status' => true,
+            'is_cash' => false,
         ]);
 
     $response->assertStatus(201)
         ->assertJsonPath('data.name.en', 'Vodafone Cash')
         ->assertJsonPath('data.name.ar', 'Vodafone Cash')
         ->assertJsonPath('data.description.en', 'Mobile cash wallet payment')
+        ->assertJsonPath('data.is_cash', false)
         ->assertJsonPath('data.icon', url('storage/payment_methods/vodafone.png'));
+});
+
+test('is_cash is required when creating a payment method', function () {
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/payment-methods', [
+            'name' => [
+                'ar' => 'نقدي',
+                'en' => 'Cash',
+            ],
+        ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['is_cash']);
 });
 
 test('admin can list payment methods with pagination and select_options', function () {
     PaymentMethod::create([
         'name' => ['ar' => 'كاش تجريبي', 'en' => 'Test Cash'],
         'status' => true,
+        'is_cash' => true,
     ]);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
@@ -177,6 +203,7 @@ test('admin can list payment methods with pagination and select_options', functi
                     'description',
                     'icon',
                     'status',
+                    'is_cash',
                     'created_at',
                     'updated_at',
                 ],

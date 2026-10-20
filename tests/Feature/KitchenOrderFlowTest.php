@@ -3,6 +3,7 @@
 use App\Models\Addon;
 use App\Models\Admin;
 use App\Models\Branch;
+use App\Models\FinancialAccount;
 use App\Models\Kitchen;
 use App\Models\KitchenOrder;
 use App\Models\KitchenOrderDet;
@@ -400,6 +401,14 @@ test('terminal status updates on Order or OrderCart auto delete all related Kitc
 });
 
 test('admin order store creates order with correct status and dispatches to kitchen', function () {
+    $financialAccount = FinancialAccount::create([
+        'name' => ['ar' => 'الخزينة'],
+        'branch_id' => $this->branch->id,
+        'balance' => 1000,
+        'is_cash' => true,
+        'status' => true,
+    ]);
+
     $product = Product::create([
         'name' => ['ar' => 'بيتزا مشكل'],
         'image' => 'products/pizza.png',
@@ -411,6 +420,7 @@ test('admin order store creates order with correct status and dispatches to kitc
     $resDelivery = $this->withHeader('Authorization', 'Bearer '.$this->adminToken)
         ->postJson('/api/admin/orders', [
             'module' => 'delivery',
+            'financial_account_id' => $financialAccount->id,
             'total' => 120,
             'final_price' => 120,
             'products' => [
@@ -437,6 +447,7 @@ test('admin order store creates order with correct status and dispatches to kitc
     $resDinein = $this->withHeader('Authorization', 'Bearer '.$this->adminToken)
         ->postJson('/api/admin/orders', [
             'module' => 'dinein',
+            'financial_account_id' => $financialAccount->id,
             'total' => 120,
             'final_price' => 120,
             'products' => [

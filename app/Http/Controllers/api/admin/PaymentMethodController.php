@@ -55,6 +55,7 @@ class PaymentMethodController extends Controller
                 ? 'nullable|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
                 : 'nullable|string|max:255',
             'status' => 'nullable|boolean',
+            'is_cash' => 'required|boolean',
         ]);
 
         $iconPath = $request->hasFile('icon')
@@ -66,6 +67,7 @@ class PaymentMethodController extends Controller
             'description' => $validated['description'] ?? null,
             'icon' => $iconPath,
             'status' => $validated['status'] ?? true,
+            'is_cash' => (bool) $validated['is_cash'],
         ]);
 
         return response()->json([
@@ -106,6 +108,7 @@ class PaymentMethodController extends Controller
                 ? 'nullable|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
                 : 'nullable|string|max:255',
             'status' => 'nullable|boolean',
+            'is_cash' => 'sometimes|required|boolean',
         ]);
 
         $dataToUpdate = [];
@@ -118,6 +121,9 @@ class PaymentMethodController extends Controller
         }
         if ($request->has('status')) {
             $dataToUpdate['status'] = $validated['status'] ?? true;
+        }
+        if ($request->has('is_cash')) {
+            $dataToUpdate['is_cash'] = (bool) $validated['is_cash'];
         }
 
         if ($request->hasFile('icon')) {
@@ -164,7 +170,7 @@ class PaymentMethodController extends Controller
     private function getSelectOptions(): array
     {
         return [
-            'payment_methods' => PaymentMethod::select('id', 'name', 'icon', 'status')->get(),
+            'payment_methods' => PaymentMethod::select('id', 'name', 'icon', 'status', 'is_cash')->get(),
         ];
     }
 

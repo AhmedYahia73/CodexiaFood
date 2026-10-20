@@ -325,12 +325,21 @@ test('admin can perform CRUD on FinancialAccount model with storage icon URL & b
     $branch = Branch::create(['name' => 'Branch Finance']);
     $iconFile = UploadedFile::fake()->image('account_icon.png');
 
+    // Missing is_cash returns 422
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/financial-accounts', [
+            'name' => ['en' => 'Cash Safe A', 'ar' => 'خزنة نقدية أ'],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['is_cash']);
+
     $storeResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/admin/financial-accounts', [
             'name' => ['en' => 'Cash Safe A', 'ar' => 'خزنة نقدية أ'],
             'icon' => $iconFile,
             'balance' => 5000.50,
             'status' => true,
+            'is_cash' => false,
             'branch_id' => $branch->id,
         ]);
 
@@ -338,6 +347,7 @@ test('admin can perform CRUD on FinancialAccount model with storage icon URL & b
         ->assertJsonPath('data.name.en', 'Cash Safe A')
         ->assertJsonPath('data.name.ar', 'خزنة نقدية أ')
         ->assertJsonPath('data.balance', 5000.5)
+        ->assertJsonPath('data.is_cash', false)
         ->assertJsonStructure(['select_options' => ['branches']]);
 
     $iconUrl = $storeResponse->json('data.icon');
@@ -348,6 +358,21 @@ test('admin can perform CRUD on FinancialAccount model with storage icon URL & b
     expect($branchesList[0])->toHaveKeys(['id', 'name']);
 
     $accountId = $storeResponse->json('data.id');
+
+    // Update is_cash
+    $updateResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->putJson("/api/admin/financial-accounts/{$accountId}", [
+            'is_cash' => true,
+        ]);
+
+    $updateResponse->assertStatus(200)
+        ->assertJsonPath('data.is_cash', true);
+
+    // Show returns is_cash
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson("/api/admin/financial-accounts/{$accountId}")
+        ->assertStatus(200)
+        ->assertJsonPath('data.is_cash', true);
 
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->deleteJson("/api/admin/financial-accounts/{$accountId}")

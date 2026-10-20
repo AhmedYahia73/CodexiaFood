@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FinancialAccount extends Model
 {
@@ -15,6 +16,7 @@ class FinancialAccount extends Model
         'icon',
         'balance',
         'status',
+        'is_cash',
         'branch_id',
     ];
 
@@ -24,11 +26,17 @@ class FinancialAccount extends Model
             'name' => 'array',
             'balance' => 'decimal:2',
             'status' => 'boolean',
+            'is_cash' => 'boolean',
         ];
     }
 
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 }

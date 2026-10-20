@@ -229,6 +229,15 @@ class UserOrderController extends Controller
              * @example "ar"
              */
             'lang' => 'sometimes|nullable|string|in:ar,en',
+
+            /**
+             * Payment Method ID.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'payment_method_id' => 'sometimes|nullable|exists:payment_methods,id',
         ]);
 
         $userLat = (float) $validated['lat'];
@@ -274,13 +283,25 @@ class UserOrderController extends Controller
 
         $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems);
 
+        $module = $validated['module'] ?? 'delivery';
+        $isDelivery = ($module === 'delivery');
+
+        $paymentMethodId = $validated['payment_method_id'] ?? null;
+        $isCash = false;
+        if ($paymentMethodId) {
+            $isCash = (bool) PaymentMethod::where('id', $paymentMethodId)->value('is_cash');
+        }
+        $paid = ! ($isCash && $isDelivery);
+
         // 4. Create Order inside DB transaction
-        $order = DB::transaction(function () use ($validated, $carts, $grandTotals, $branchId, $uuId): Order {
+        $order = DB::transaction(function () use ($validated, $paymentMethodId, $paid, $carts, $grandTotals, $branchId, $uuId): Order {
             $order = Order::create([
                 'shift_id' => null,
                 'cashier_id' => null,
                 'cashier_man_id' => null,
                 'hall_table_id' => null,
+                'payment_method_id' => $paymentMethodId,
+                'paid' => $paid,
                 'branch_id' => $branchId,
                 'module' => $validated['module'] ?? 'delivery',
                 'address' => $validated['address'],

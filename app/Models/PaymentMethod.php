@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PaymentMethod extends Model
 {
@@ -14,6 +15,7 @@ class PaymentMethod extends Model
         'description',
         'icon',
         'status',
+        'is_cash',
     ];
 
     protected function casts(): array
@@ -22,6 +24,12 @@ class PaymentMethod extends Model
             'name' => 'array',
             'description' => 'array',
             'status' => 'boolean',
+            'is_cash' => 'boolean',
         ];
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 }

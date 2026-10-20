@@ -29,6 +29,7 @@ class PaymentMethodResource extends JsonResource
             'description' => $this->description,
             'icon' => $iconUrl,
             'status' => (bool) $this->status,
+            'is_cash' => (bool) $this->is_cash,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

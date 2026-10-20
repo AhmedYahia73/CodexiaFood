@@ -8,12 +8,15 @@ use App\Models\Addon;
 use App\Models\Branch;
 use App\Models\Cashier;
 use App\Models\CashierMan;
+use App\Models\Delivery;
+use App\Models\FinancialAccount;
 use App\Models\HallTable;
 use App\Models\Order;
 use App\Models\OrderPAddon;
 use App\Models\OrderPOption;
 use App\Models\OrderProduct;
 use App\Models\OrderPVariation;
+use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Shift;
 use App\Services\KitchenDispatchService;
@@ -38,6 +41,9 @@ class OrderController extends Controller
             'cashier',
             'cashierMan',
             'hallTable',
+            'financialAccount',
+            'delivery',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',
@@ -84,6 +90,9 @@ class OrderController extends Controller
                 'cashiers' => Cashier::select('id', 'name', 'branch_id')->get(),
                 'cashier_men' => CashierMan::select('id', 'name', 'branch_id', 'shift_id')->get(),
                 'hall_tables' => HallTable::select('id', 'name', 'branch_id', 'hall_id')->get(),
+                'financial_accounts' => FinancialAccount::select('id', 'name', 'balance', 'status', 'is_cash', 'branch_id')->get(),
+                'payment_methods' => PaymentMethod::select('id', 'name', 'icon', 'status', 'is_cash')->get(),
+                'deliveries' => Delivery::select('id', 'name', 'phone', 'branch_id')->get(),
                 'products' => Product::with(['variations.options'])->select('id', 'name', 'price')->get(),
                 'addons' => Addon::select('id', 'name', 'price')->get(),
             ],
@@ -400,11 +409,28 @@ class OrderController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $isPos = $request->has('is_pos')
+            ? filter_var($request->input('is_pos'), FILTER_VALIDATE_BOOLEAN)
+            : true;
+
         $validated = $request->validate([
             'shift_id' => 'nullable|exists:shifts,id',
             'cashier_id' => 'nullable|exists:cashiers,id',
             'cashier_man_id' => 'nullable|exists:cashier_men,id',
             'hall_table_id' => 'nullable|exists:hall_tables,id',
+            'financial_account_id' => [
+                $isPos ? 'required_without:financial_id' : 'nullable',
+                'integer',
+                'exists:financial_accounts,id',
+            ],
+            'financial_id' => 'sometimes|nullable|integer|exists:financial_accounts,id',
+            'delivery_id' => 'nullable|exists:deliveries,id',
+            'payment_method_id' => [
+                $isPos ? 'nullable' : 'required',
+                'integer',
+                'exists:payment_methods,id',
+            ],
+            'paid' => 'nullable|boolean',
             'module' => 'required|in:takeaway,dinein,delivery',
             'address' => 'nullable|string',
             'note' => 'nullable|string',
@@ -432,18 +458,40 @@ class OrderController extends Controller
             'products.*.addons.*.price' => 'required_with:products.*.addons|numeric|min:0',
         ]);
 
-        $order = DB::transaction(function () use ($validated): Order {
+        $financialAccountId = $validated['financial_account_id'] ?? $validated['financial_id'] ?? null;
+        $paymentMethodId = $validated['payment_method_id'] ?? null;
+
+        $isCash = false;
+        if ($financialAccountId) {
+            $isCash = (bool) FinancialAccount::where('id', $financialAccountId)->value('is_cash');
+        }
+        if ($paymentMethodId) {
+            $isCash = $isCash || (bool) PaymentMethod::where('id', $paymentMethodId)->value('is_cash');
+        }
+
+        $module = $validated['module'] ?? 'delivery';
+        $isDelivery = ($module === 'delivery');
+
+        $paid = array_key_exists('paid', $validated) && ! is_null($validated['paid'])
+            ? (bool) $validated['paid']
+            : (! ($isCash && $isDelivery));
+
+        $order = DB::transaction(function () use ($validated, $financialAccountId, $paymentMethodId, $paid, $isPos): Order {
             $order = Order::create([
                 'shift_id' => $validated['shift_id'] ?? null,
                 'cashier_id' => $validated['cashier_id'] ?? null,
                 'cashier_man_id' => $validated['cashier_man_id'] ?? null,
                 'hall_table_id' => $validated['hall_table_id'] ?? null,
+                'financial_account_id' => $financialAccountId,
+                'delivery_id' => $validated['delivery_id'] ?? null,
+                'payment_method_id' => $paymentMethodId,
+                'paid' => $paid,
                 'module' => $validated['module'],
                 'address' => $validated['address'] ?? null,
                 'note' => $validated['note'] ?? null,
                 'phone' => $validated['phone'] ?? null,
                 'name' => $validated['name'] ?? null,
-                'is_pos' => $validated['is_pos'] ?? true,
+                'is_pos' => $isPos,
                 'status' => $validated['module'] === 'dinein' ? 'pickup' : 'preparing',
                 'total' => $validated['total'],
                 'total_tax' => $validated['total_tax'] ?? 0,
@@ -492,6 +540,9 @@ class OrderController extends Controller
             'cashier',
             'cashierMan',
             'hallTable',
+            'financialAccount',
+            'delivery',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',
@@ -517,6 +568,9 @@ class OrderController extends Controller
             'cashier',
             'cashierMan',
             'hallTable',
+            'financialAccount',
+            'delivery',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',

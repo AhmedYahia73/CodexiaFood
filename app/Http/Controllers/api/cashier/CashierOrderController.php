@@ -126,6 +126,9 @@ class CashierOrderController extends Controller
             'cashier',
             'cashierMan',
             'hallTable',
+            'financialAccount',
+            'delivery',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',
@@ -196,6 +199,9 @@ class CashierOrderController extends Controller
             'cashier',
             'cashierMan',
             'hallTable',
+            'financialAccount',
+            'delivery',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',
@@ -298,6 +304,33 @@ class CashierOrderController extends Controller
              * @example 1
              */
             'financial_id' => 'sometimes|nullable|integer',
+
+            /**
+             * Delivery ID for delivery orders.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'delivery_id' => 'sometimes|nullable|exists:deliveries,id',
+
+            /**
+             * Payment Method ID.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'payment_method_id' => 'sometimes|nullable|exists:payment_methods,id',
+
+            /**
+             * Paid status boolean.
+             *
+             * @var bool|null
+             *
+             * @example true
+             */
+            'paid' => 'sometimes|nullable|boolean',
         ]);
 
         $financialAccountId = $validated['financial_account_id'] ?? $validated['financial_id'] ?? null;
@@ -389,13 +422,31 @@ class CashierOrderController extends Controller
         $cashier = Cashier::find($cashierId);
         $branchId = $cashier?->branch_id ?? auth()->user()?->branch_id;
 
-        $order = DB::transaction(function () use ($validated, $tableId, $financialAccountId, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
+        $paymentMethodId = $validated['payment_method_id'] ?? null;
+        $isCash = false;
+        if ($financialAccountId) {
+            $isCash = (bool) FinancialAccount::where('id', $financialAccountId)->value('is_cash');
+        }
+        if ($paymentMethodId) {
+            $isCash = $isCash || (bool) PaymentMethod::where('id', $paymentMethodId)->value('is_cash');
+        }
+        $module = $validated['module'] ?? 'takeaway';
+        $isDelivery = ($module === 'delivery');
+
+        $paid = array_key_exists('paid', $validated) && ! is_null($validated['paid'])
+            ? (bool) $validated['paid']
+            : (! ($isCash && $isDelivery));
+
+        $order = DB::transaction(function () use ($validated, $tableId, $financialAccountId, $paymentMethodId, $paid, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
             $order = Order::create([
                 'shift_id' => $openShiftId,
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
                 'hall_table_id' => $tableId,
                 'financial_account_id' => $financialAccountId,
+                'delivery_id' => $validated['delivery_id'] ?? null,
+                'payment_method_id' => $paymentMethodId,
+                'paid' => $paid,
                 'module' => $validated['module'],
                 'address' => $validated['address'] ?? null,
                 'note' => $validated['note'] ?? null,
@@ -508,6 +559,9 @@ class CashierOrderController extends Controller
             'cashier',
             'cashierMan',
             'hallTable',
+            'financialAccount',
+            'delivery',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',

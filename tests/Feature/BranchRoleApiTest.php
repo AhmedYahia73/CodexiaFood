@@ -2,6 +2,7 @@
 
 use App\Models\Branch;
 use App\Models\Cashier;
+use App\Models\FinancialAccount;
 use App\Models\Hall;
 use App\Models\Kitchen;
 use App\Models\Material;
@@ -132,9 +133,18 @@ test('branch dashboard statistics only aggregates orders of the authenticated br
 });
 
 test('branch order creation automatically assigns branch_id', function () {
+    $financialAccount = FinancialAccount::create([
+        'name' => ['en' => 'Branch Vault', 'ar' => 'خزينة الفرع'],
+        'branch_id' => $this->branch1->id,
+        'balance' => 1000,
+        'is_cash' => true,
+        'status' => true,
+    ]);
+
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token1)
         ->postJson('/api/branch/orders', [
             'module' => 'takeaway',
+            'financial_account_id' => $financialAccount->id,
             'total' => 150,
             'final_price' => 150,
         ]);

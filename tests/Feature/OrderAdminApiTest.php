@@ -5,6 +5,7 @@ use App\Models\Admin;
 use App\Models\Branch;
 use App\Models\Cashier;
 use App\Models\CashierMan;
+use App\Models\FinancialAccount;
 use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Option;
@@ -45,6 +46,13 @@ beforeEach(function () {
 
     $this->cashier = Cashier::create([
         'name' => 'Cashier POS 1',
+        'branch_id' => $this->branch->id,
+    ]);
+
+    $this->financialAccount = FinancialAccount::create([
+        'name' => ['ar' => 'الخزينة', 'en' => 'Main Safe'],
+        'status' => true,
+        'is_cash' => true,
         'branch_id' => $this->branch->id,
     ]);
 
@@ -169,6 +177,7 @@ test('admin can create full order with nested products, variations, options, and
         'cashier_id' => $this->cashier->id,
         'cashier_man_id' => $this->cashierMan->id,
         'hall_table_id' => $this->hallTable->id,
+        'financial_account_id' => $this->financialAccount->id,
         'module' => 'dinein',
         'is_pos' => true,
         'total' => 190.00,
