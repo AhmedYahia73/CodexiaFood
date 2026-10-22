@@ -76,6 +76,7 @@ test('overnight working hours logic correctly identifies open and closed times',
 
     // 02:00 AM (Next calendar day, but inside current overnight shift) -> OPEN
     Carbon::setTestNow(Carbon::parse('2026-10-04 02:00:00'));
+    $this->token = JWTAuth::fromUser($this->admin);
     expect($this->businessSetup->isOpen())->toBeTrue();
 
     // 03:00 AM (Closing minute) -> OPEN
@@ -163,6 +164,7 @@ test('user can mutate cart at 02:00 AM when working hours extend overnight to 03
 
     // Freeze time at 02:00 AM (open)
     Carbon::setTestNow(Carbon::parse('2026-10-04 02:00:00'));
+    $this->token = JWTAuth::fromUser($this->admin);
 
     $response = $this->postJson('/api/user/cart', [
         'uu_id' => 'user-overnight-uuid',
@@ -207,6 +209,7 @@ test('admin orders index fetches today and yesterday business days by default', 
     // Today's business day: started Friday 2026-10-03 at 09:00:00 AM
     // Yesterday's business day: started Thursday 2026-10-02 at 09:00:00 AM
     Carbon::setTestNow(Carbon::parse('2026-10-04 02:00:00'));
+    $this->token = JWTAuth::fromUser($this->admin);
 
     // Order 1: Thursday 08:30 AM (Older than yesterday's business shift start 09:00) -> Should NOT appear
     $oldOrder = Order::create([
@@ -264,6 +267,7 @@ test('admin orders check-new endpoint compares client count and returns extra or
 
     // Current time: Saturday 2026-10-04 at 02:00:00 AM
     Carbon::setTestNow(Carbon::parse('2026-10-04 02:00:00'));
+    $this->token = JWTAuth::fromUser($this->admin);
 
     // Create 3 online orders within today & yesterday window
     $order1 = Order::create([

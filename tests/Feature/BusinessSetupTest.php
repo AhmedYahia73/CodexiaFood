@@ -217,3 +217,128 @@ test('admin can set has_gift and price_gift keys in business setup', function ()
     expect($setup->has_gift)->toBeTrue()
         ->and($setup->price_gift)->toBe(2);
 });
+
+test('admin can save business setup with menu images and see them as links', function () {
+    Storage::fake('public');
+
+    $logo = UploadedFile::fake()->image('logo.png');
+    $menu1 = UploadedFile::fake()->image('menu1.png');
+    $menu2 = UploadedFile::fake()->image('menu2.png');
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم المنيو',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/menu',
+            'instagram' => 'https://instagram.com/menu',
+            'whats' => '01012345678',
+            'logo' => $logo,
+            'description' => 'وصف المطعم',
+            'menu' => [$menu1, $menu2],
+        ]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('status', true);
+
+    $setup = BusinessSetup::first();
+    expect($setup->menu)->toBeArray()
+        ->and($setup->menu)->toHaveCount(2);
+
+    foreach ($setup->menu as $path) {
+        Storage::disk('public')->assertExists($path);
+    }
+
+    $links = $response->json('data.menu');
+    expect($links)->toHaveCount(2)
+        ->and($links[0])->toContain(url('storage/'))
+        ->and($links[1])->toContain(url('storage/'));
+});
+
+test('admin can update business setup menu and clean up removed images', function () {
+    Storage::fake('public');
+
+    $logo = UploadedFile::fake()->image('logo.png');
+    $menu1 = UploadedFile::fake()->image('menu1.png');
+    $menu2 = UploadedFile::fake()->image('menu2.png');
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم التحديث',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/update',
+            'instagram' => 'https://instagram.com/update',
+            'whats' => '01012345678',
+            'logo' => $logo,
+            'description' => 'وصف المطعم',
+            'menu' => [$menu1, $menu2],
+        ])->assertStatus(200);
+
+    $setup = BusinessSetup::first();
+    $oldMenu = $setup->menu;
+    $removedFile = $oldMenu[0];
+    $keptFile = $oldMenu[1];
+
+    $newMenu3 = UploadedFile::fake()->image('menu3.png');
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم التحديث 2',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/update',
+            'instagram' => 'https://instagram.com/update',
+            'whats' => '01012345678',
+            'logo' => $setup->logo,
+            'description' => 'وصف المطعم',
+            'menu' => [$keptFile, $newMenu3],
+        ]);
+
+    $response->assertStatus(200);
+
+    Storage::disk('public')->assertMissing($removedFile);
+    Storage::disk('public')->assertExists($keptFile);
+
+    $updatedSetup = $setup->fresh();
+    expect($updatedSetup->menu)->toHaveCount(2)
+        ->and($updatedSetup->menu)->toContain($keptFile);
+});
+
+test('admin can set menu to null or empty array', function () {
+    Storage::fake('public');
+
+    $logo = UploadedFile::fake()->image('logo.png');
+    $menuFile = UploadedFile::fake()->image('menu.png');
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم تفريغ المنيو',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/clear',
+            'instagram' => 'https://instagram.com/clear',
+            'whats' => '01012345678',
+            'logo' => $logo,
+            'description' => 'وصف المطعم',
+            'menu' => [$menuFile],
+        ])->assertStatus(200);
+
+    $setup = BusinessSetup::first();
+    $storedPath = $setup->menu[0];
+    Storage::disk('public')->assertExists($storedPath);
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم تفريغ المنيو',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/clear',
+            'instagram' => 'https://instagram.com/clear',
+            'whats' => '01012345678',
+            'logo' => $setup->logo,
+            'description' => 'وصف المطعم',
+            'menu' => null,
+        ]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.menu', null);
+
+    Storage::disk('public')->assertMissing($storedPath);
+    expect($setup->fresh()->menu)->toBeNull();
+});

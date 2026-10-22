@@ -180,12 +180,53 @@ test('public user can fetch addons without authentication', function () {
 });
 
 test('public user can fetch business setup without authentication', function () {
+    $this->businessSetup->update([
+        'menu' => ['business_setup/menu1.png', 'https://example.com/menu2.png'],
+    ]);
+
     $response = $this->getJson('/api/user/business-setup')
         ->assertStatus(200)
         ->assertJsonStructure([
             'status',
-            'data',
+            'data' => [
+                'menu',
+                'raw_menu',
+            ],
         ]);
 
-    expect($response->json('status'))->toBeTrue();
+    expect($response->json('status'))->toBeTrue()
+        ->and($response->json('data.menu'))->toHaveCount(2)
+        ->and($response->json('data.menu.0'))->toBe(url('storage/business_setup/menu1.png'))
+        ->and($response->json('data.menu.1'))->toBe('https://example.com/menu2.png');
+});
+
+test('public user can fetch menu without authentication token', function () {
+    $this->businessSetup->update([
+        'menu' => ['business_setup/menu1.png', 'business_setup/menu2.png'],
+    ]);
+
+    $response = $this->getJson('/api/user/menu')
+        ->assertStatus(200)
+        ->assertJson([
+            'status' => true,
+            'data' => [
+                url('storage/business_setup/menu1.png'),
+                url('storage/business_setup/menu2.png'),
+            ],
+        ]);
+
+    expect($response->json('data'))->toHaveCount(2);
+});
+
+test('public user receives empty array when no menu images exist', function () {
+    $this->businessSetup->update([
+        'menu' => null,
+    ]);
+
+    $response = $this->getJson('/api/user/menu')
+        ->assertStatus(200)
+        ->assertJson([
+            'status' => true,
+            'data' => [],
+        ]);
 });

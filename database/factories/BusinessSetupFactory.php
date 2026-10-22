@@ -30,6 +30,7 @@ class BusinessSetupFactory extends Factory
             'end_day' => '03:00:00',
             'has_gift' => false,
             'price_gift' => 1,
+            'menu' => null,
         ];
     }
 }

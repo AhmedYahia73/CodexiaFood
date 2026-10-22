@@ -364,6 +364,7 @@ Route::prefix('user')->group(function () {
     Route::get('products/{product}', [UserHomeController::class, 'productDetails']);
     Route::get('addons', [UserHomeController::class, 'addons']);
     Route::get('business-setup', [UserHomeController::class, 'businessSetup']);
+    Route::get('menu', [UserHomeController::class, 'menu']);
     Route::get('payment-methods', [UserOrderController::class, 'paymentMethods']);
 
     Route::delete('cart/clear', [UserCartController::class, 'clear']);

@@ -8,6 +8,7 @@ use App\Models\BusinessSetup;
 use App\trait\image;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 
 class BusinessSetupController extends Controller
 {
@@ -36,6 +37,13 @@ class BusinessSetupController extends Controller
     public function update(Request $request, ?BusinessSetup $businessSetup = null): JsonResponse
     {
         $setup = ($businessSetup && $businessSetup->exists) ? $businessSetup : BusinessSetup::first();
+
+        if (is_string($request->input('menu'))) {
+            $decoded = json_decode($request->input('menu'), true);
+            if (is_array($decoded) || is_null($decoded)) {
+                $request->merge(['menu' => $decoded]);
+            }
+        }
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -69,6 +77,16 @@ class BusinessSetupController extends Controller
              * @example 1
              */
             'price_gift' => 'sometimes|nullable|integer|min:0',
+
+            /**
+             * Menu images (array of uploaded image files or existing image paths/URLs).
+             *
+             * @var array<string>|null
+             *
+             * @example ["business_setup/menu1.png"]
+             */
+            'menu' => 'sometimes|nullable|array',
+            'menu.*' => 'nullable',
         ]);
 
         $logoPath = null;
@@ -109,6 +127,51 @@ class BusinessSetupController extends Controller
 
         if ($logoPath !== null) {
             $data['logo'] = $logoPath;
+        }
+
+        if (array_key_exists('menu', $validated) || $request->hasFile('menu')) {
+            $rawMenu = $request->all()['menu'] ?? null;
+
+            if (is_null($rawMenu)) {
+                $data['menu'] = null;
+                if ($setup && is_array($setup->menu)) {
+                    foreach ($setup->menu as $oldImage) {
+                        $oldPath = str_contains($oldImage, '/storage/')
+                            ? substr($oldImage, strpos($oldImage, '/storage/') + strlen('/storage/'))
+                            : $oldImage;
+                        $this->deleteImage($oldPath);
+                    }
+                }
+            } else {
+                $processedMenu = [];
+                $menuItems = is_array($rawMenu) ? $rawMenu : [$rawMenu];
+
+                foreach ($menuItems as $key => $item) {
+                    if ($item instanceof UploadedFile) {
+                        $processedMenu[] = $item->store('business_setup', 'public');
+                    } elseif ($request->hasFile("menu.{$key}")) {
+                        $processedMenu[] = $request->file("menu.{$key}")->store('business_setup', 'public');
+                    } elseif (is_string($item) && trim($item) !== '') {
+                        if (str_contains($item, '/storage/')) {
+                            $processedMenu[] = substr($item, strpos($item, '/storage/') + strlen('/storage/'));
+                        } else {
+                            $processedMenu[] = $item;
+                        }
+                    }
+                }
+
+                $data['menu'] = $processedMenu;
+
+                if ($setup && is_array($setup->menu)) {
+                    $removedImages = array_diff($setup->menu, $processedMenu);
+                    foreach ($removedImages as $removed) {
+                        $removedPath = str_contains($removed, '/storage/')
+                            ? substr($removed, strpos($removed, '/storage/') + strlen('/storage/'))
+                            : $removed;
+                        $this->deleteImage($removedPath);
+                    }
+                }
+            }
         }
 
         $isNew = ! $setup;

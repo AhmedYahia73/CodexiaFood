@@ -15,6 +15,7 @@
    - [تفاصيل منتج معين والخيارات (Product Details)](#24-تفاصيل-منتج-معين-get-apiuserproductsproduct)
    - [جلب قائمة الإضافات (Addons)](#25-جلب-قائمة-الإضافات-get-apiuseraddons)
    - [إعدادات وبيانات المتجر ونطاق التغطية (Business Setup)](#26-بيانات-المتجر-ونطاق-التغطية-get-apiuserbusiness-setup)
+   - [طرق الدفع النشطة للطلب (Payment Methods)](#27-طرق-الدفع-النشطة-للطلب-get-apiuserpayment-methods)
 3. [واجهات سلة المشتريات (Cart APIs)](#3-واجهات-سلة-المشتريات-cart-apis)
    - [عرض عناصر السلة والإجماليات (Get Cart)](#31-عرض-عناصر-السلة-get-apiusercart)
    - [إضافة منتج إلى السلة (Add to Cart)](#32-إضافة-منتج-إلى-السلة-post-apiusercart)
@@ -253,6 +254,39 @@
 
 ---
 
+### 2.7. طرق الدفع النشطة للطلب
+* **Method**: `GET`
+* **URL**: `/api/user/payment-methods`
+* **Query Parameters**:
+  | Parameter | Type | Required | Description | Example |
+  |---|---|---|---|---|
+  | `lang` | string | اختياري | لغة أسماء طرق الدفع (`ar` أو `en`) | `ar` |
+
+* **Response Example (200 OK)**:
+```json
+{
+  "status": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "نقداً عند الاستلام",
+      "is_cash": true,
+      "icon": "http://your-domain/storage/payment_methods/cash.png"
+    },
+    {
+      "id": 2,
+      "name": "فودافون كاش / إنستاباي",
+      "is_cash": false,
+      "icon": "http://your-domain/storage/payment_methods/instapay.png"
+    }
+  ]
+}
+```
+
+> **ملاحظة هامة للفرونت إند**: حقل `is_cash` يوضح ما إذا كانت طريقة الدفع كاش أو إلكترونية. إذا كانت `is_cash: false`، يجب إظهار حقل رفع صورة إيصال التحويل (`receipt`) وإرساله مع طلب إتمام الطلب (Checkout).
+
+---
+
 ## 3. واجهات سلة المشتريات (Cart APIs)
 
 تعتمد جميع واجهات السلة على معرف المستخدم `uu_id`. يمكن إرسال `uu_id` في:
@@ -488,27 +522,31 @@
 ### 4.1. إتمام الطلب (Checkout)
 * **Method**: `POST`
 * **URL**: `/api/user/orders/checkout`
+* **Content-Type**: `multipart/form-data` *(ضروري عند رفع صورة الإيصال)*
 * **الوصف**:
   يقوم بإنشاء طلب جديد من عناصر سلة العميل المحددة بـ `uu_id`، وفحص المسافة الجغرافية بين إحداثيات العميل `(lat, lng)` وجميع الفروع النشطة. يتم ربط الطلب بأقرب فرع تلقائياً بشرط ألا تزيد المسافة عن نطاق التغطية `branch_cover` (الافتراضي 5 كم). كما يتم خصم المخزون ومسح السلة.
+  **طريقة الدفع**: حقل `payment_method_id` إلزامي. إذا كانت طريقة الدفع غير نقدية (`is_cash: false`)، يجب إرفاق صورة إيصال التحويل في حقل `receipt`.
 
-* **Request Body**:
-```json
-{
-  "uu_id": "client-uuid-12345",
-  "lat": 29.9650,
-  "lng": 31.2580,
-  "address": "شارع 9، المعادي، برج النيل، الدور الرابع",
-  "phone": "01012345678",
-  "name": "أحمد يحيى",
-  "note": "يرجى ترك الطلب عند الباب",
-  "module": "delivery"
-}
+* **Request Body (FormData)**:
+```text
+uu_id: "client-uuid-12345"
+payment_method_id: 2
+receipt: [صورة الإيصال - مطلوب إذا كان الدفع غير نقدي]
+lat: 29.9650
+lng: 31.2580
+address: "شارع 9، المعادي، برج النيل، الدور الرابع"
+phone: "01012345678"
+name: "أحمد يحيى"
+note: "يرجى ترك الطلب عند الباب"
+module: "delivery"
 ```
 
 * **Validation Rules**:
   | Field | Type | Rules | Description | Example |
   |---|---|---|---|---|
   | `uu_id` | string | `required, string, max:255` | معرّف العميل الفريد | `"client-uuid-12345"` |
+  | `payment_method_id` | integer | `required, integer, exists:payment_methods,id` | معرّف طريقة الدفع المختارة | `2` |
+  | `receipt` | File (image) | `required_if (is_cash=false), image, mimes:jpeg,png,jpg,webp, max:5120` | صورة إيصال التحويل (مطلوبة للدفع غير النقدي) | `receipt.jpg` |
   | `lat` | float | `required, numeric, between:-90,90` | خط عرض موقع العميل | `29.9650` |
   | `lng` | float | `required, numeric, between:-180,180` | خط طول موقع العميل | `31.2580` |
   | `address` | string | `required, string, max:500` | تفاصيل عنوان التوصيل | `"شارع 9، المعادي"` |
@@ -516,6 +554,7 @@
   | `name` | string | `required, string, max:255` | اسم العميل بالكامل | `"أحمد يحيى"` |
   | `note` | string | `nullable, string, max:1000` | ملاحظات التوصيل | `"بدون مخلل"` |
   | `module` | string | `nullable, in:delivery,takeaway,dinein` | نوع الطلب (افتراضياً: delivery) | `"delivery"` |
+  | `lang` | string | `nullable, in:ar,en` | لغة رسائل الخطأ والاستجابة | `"ar"` |
 
 * **Response Success (201 Created)**:
 ```json
@@ -530,6 +569,17 @@
     "cashier_id": null,
     "cashier_man_id": null,
     "hall_table_id": null,
+    "payment_method_id": 2,
+    "payment_method": {
+      "id": 2,
+      "name": {
+        "ar": "فودافون كاش / إنستاباي",
+        "en": "Vodafone Cash / InstaPay"
+      },
+      "is_cash": false
+    },
+    "receipt": "http://your-domain/storage/orders/receipts/receipt_sample.jpg",
+    "reciept": "http://your-domain/storage/orders/receipts/receipt_sample.jpg",
     "branch_id": 2,
     "module": "delivery",
     "address": "شارع 9، المعادي، برج النيل، الدور الرابع",
@@ -539,6 +589,7 @@
     "phone": "01012345678",
     "name": "أحمد يحيى",
     "is_pos": false,
+    "paid": true,
     "total": 310.00,
     "total_tax": 39.76,
     "total_discount": 26.00,

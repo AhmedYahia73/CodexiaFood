@@ -286,4 +286,38 @@ class UserHomeController extends Controller
             'data' => $businessSetup ? new BusinessSetupResource($businessSetup) : null,
         ]);
     }
+
+    /**
+     * Get menu images.
+     */
+    public function menu(Request $request): JsonResponse
+    {
+        $request->validate([
+            /**
+             * Response language ('ar' or 'en').
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $businessSetup = BusinessSetup::first();
+
+        $menuUrls = [];
+        if ($businessSetup && is_array($businessSetup->menu)) {
+            foreach ($businessSetup->menu as $item) {
+                if (! is_string($item) || trim($item) === '') {
+                    continue;
+                }
+                $menuUrls[] = $this->formatImageUrl($item);
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => $menuUrls,
+        ]);
+    }
 }

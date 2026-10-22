@@ -23,6 +23,21 @@ class BusinessSetupResource extends JsonResource
             }
         }
 
+        $menuUrls = null;
+        if (is_array($this->menu)) {
+            $menuUrls = [];
+            foreach ($this->menu as $item) {
+                if (! is_string($item) || trim($item) === '') {
+                    continue;
+                }
+                if (str_starts_with($item, 'http://') || str_starts_with($item, 'https://')) {
+                    $menuUrls[] = $item;
+                } else {
+                    $menuUrls[] = url('storage/'.ltrim($item, '/'));
+                }
+            }
+        }
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -32,6 +47,8 @@ class BusinessSetupResource extends JsonResource
             'whats' => $this->whats,
             'logo' => $logoUrl,
             'raw_logo' => $this->logo,
+            'menu' => $menuUrls,
+            'raw_menu' => $this->menu,
             'description' => $this->description,
             'branch_cover' => (float) ($this->branch_cover ?? 5.00),
             'start_day' => $this->start_day ? substr((string) $this->start_day, 0, 5) : '09:00',

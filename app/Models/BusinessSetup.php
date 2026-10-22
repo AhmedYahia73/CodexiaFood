@@ -27,6 +27,7 @@ class BusinessSetup extends Model
         'table_order_url',
         'has_gift',
         'price_gift',
+        'menu',
     ];
 
     protected $attributes = [
@@ -43,6 +44,7 @@ class BusinessSetup extends Model
             'branch_cover' => 'decimal:2',
             'has_gift' => 'boolean',
             'price_gift' => 'integer',
+            'menu' => 'array',
         ];
     }
 
