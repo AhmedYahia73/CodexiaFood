@@ -25,6 +25,15 @@ class OrderResource extends JsonResource
             ? ($shiftName[$locale] ?? $shiftName['ar'] ?? $shiftName['en'] ?? null)
             : $shiftName;
 
+        $receiptUrl = null;
+        if ($this->receipt) {
+            if (str_starts_with($this->receipt, 'http://') || str_starts_with($this->receipt, 'https://')) {
+                $receiptUrl = $this->receipt;
+            } else {
+                $receiptUrl = url('storage/'.ltrim($this->receipt, '/'));
+            }
+        }
+
         return [
             'id' => $this->id,
             'shift_id' => $this->shift_id,
@@ -37,6 +46,8 @@ class OrderResource extends JsonResource
             'financial_account' => new FinancialAccountResource($this->whenLoaded('financialAccount')),
             'payment_method_id' => $this->payment_method_id,
             'payment_method' => new PaymentMethodResource($this->whenLoaded('paymentMethod')),
+            'receipt' => $receiptUrl,
+            'reciept' => $receiptUrl,
             'delivery_id' => $this->delivery_id,
             'delivery' => new DeliveryResource($this->whenLoaded('delivery')),
             'branch_id' => $this->branch_id,

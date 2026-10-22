@@ -7,10 +7,13 @@ use App\Models\Discount;
 use App\Models\Option;
 use App\Models\Order;
 use App\Models\OrderCart;
+use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Tax;
 use App\Models\Variation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -86,6 +89,18 @@ beforeEach(function () {
         'price' => 25.00,
     ]);
 
+    $this->paymentMethodCash = PaymentMethod::create([
+        'name' => ['ar' => 'نقداً عند الاستلام', 'en' => 'Cash on Delivery'],
+        'status' => true,
+        'is_cash' => true,
+    ]);
+
+    $this->paymentMethodOnline = PaymentMethod::create([
+        'name' => ['ar' => 'تحويل بنكي / محفظة', 'en' => 'Bank / Wallet Transfer'],
+        'status' => true,
+        'is_cash' => false,
+    ]);
+
     $this->uuId = 'client-device-uuid-999';
 });
 
@@ -113,6 +128,7 @@ test('checkout validates all required keys for documentation and swagger', funct
             'address',
             'phone',
             'name',
+            'payment_method_id',
         ]);
 });
 
@@ -146,6 +162,7 @@ test('user checkout succeeds when location is within branch_cover and assigns ne
         'phone' => '01012345678',
         'name' => 'أحمد يحيى',
         'note' => 'بدون شطة',
+        'payment_method_id' => $this->paymentMethodCash->id,
     ];
 
     $response = $this->postJson('/api/user/orders/checkout', $payload)
@@ -191,6 +208,7 @@ test('user checkout fails with 422 when location is outside branch_cover', funct
         'address' => 'الإسكندرية، محطة الرمل',
         'phone' => '01012345678',
         'name' => 'محمود علي',
+        'payment_method_id' => $this->paymentMethodCash->id,
     ];
 
     $response = $this->postJson('/api/user/orders/checkout', $payload)
@@ -214,6 +232,7 @@ test('user checkout fails with 400 when cart is empty', function () {
         'address' => 'شارع النصر، المعادي',
         'phone' => '01012345678',
         'name' => 'كريم سالم',
+        'payment_method_id' => $this->paymentMethodCash->id,
     ];
 
     $this->postJson('/api/user/orders/checkout', $payload)
@@ -250,4 +269,117 @@ test('user can view order details', function () {
                 'address' => 'المعادي',
             ],
         ]);
+});
+
+test('user can get payment methods with localized name based on lang and is_cash flag', function () {
+    // 1. In Arabic
+    $resAr = $this->getJson('/api/user/payment-methods?lang=ar')
+        ->assertStatus(200)
+        ->assertJsonPath('status', true);
+
+    $itemsAr = collect($resAr->json('data'));
+    $cashAr = $itemsAr->firstWhere('id', $this->paymentMethodCash->id);
+    expect($cashAr)->not->toBeNull();
+    expect($cashAr['name'])->toBe('نقداً عند الاستلام');
+    expect($cashAr['is_cash'])->toBeTrue();
+
+    // 2. In English
+    $resEn = $this->getJson('/api/user/payment-methods?lang=en')
+        ->assertStatus(200);
+
+    $itemsEn = collect($resEn->json('data'));
+    $cashEn = $itemsEn->firstWhere('id', $this->paymentMethodCash->id);
+    expect($cashEn)->not->toBeNull();
+    expect($cashEn['name'])->toBe('Cash on Delivery');
+    expect($cashEn['is_cash'])->toBeTrue();
+
+    $onlineEn = $itemsEn->firstWhere('id', $this->paymentMethodOnline->id);
+    expect($onlineEn)->not->toBeNull();
+    expect($onlineEn['name'])->toBe('Bank / Wallet Transfer');
+    expect($onlineEn['is_cash'])->toBeFalse();
+});
+
+test('user checkout requires receipt when payment method is not cash', function () {
+    $this->postJson('/api/user/cart', [
+        'uu_id' => $this->uuId,
+        'product_id' => $this->product->id,
+        'quantity' => 1,
+    ])->assertStatus(201);
+
+    $payload = [
+        'uu_id' => $this->uuId,
+        'lat' => 29.9650,
+        'lng' => 31.2580,
+        'address' => 'شارع 9، المعادي',
+        'phone' => '01012345678',
+        'name' => 'أحمد يحيى',
+        'payment_method_id' => $this->paymentMethodOnline->id, // is_cash = false
+    ];
+
+    $this->postJson('/api/user/orders/checkout', $payload)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['receipt']);
+});
+
+test('user checkout fails when receipt is not an image file', function () {
+    $this->postJson('/api/user/cart', [
+        'uu_id' => $this->uuId,
+        'product_id' => $this->product->id,
+        'quantity' => 1,
+    ])->assertStatus(201);
+
+    $file = UploadedFile::fake()->create('document.pdf', 100, 'application/pdf');
+
+    $payload = [
+        'uu_id' => $this->uuId,
+        'lat' => 29.9650,
+        'lng' => 31.2580,
+        'address' => 'شارع 9، المعادي',
+        'phone' => '01012345678',
+        'name' => 'أحمد يحيى',
+        'payment_method_id' => $this->paymentMethodOnline->id,
+        'receipt' => $file,
+    ];
+
+    $this->postJson('/api/user/orders/checkout', $payload)
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['receipt']);
+});
+
+test('user checkout succeeds with receipt upload for cashless payment and returns receipt link in order resource', function () {
+    Storage::fake('public');
+
+    $this->postJson('/api/user/cart', [
+        'uu_id' => $this->uuId,
+        'product_id' => $this->product->id,
+        'quantity' => 1,
+    ])->assertStatus(201);
+
+    $image = UploadedFile::fake()->image('receipt.jpg');
+
+    $payload = [
+        'uu_id' => $this->uuId,
+        'lat' => 29.9650,
+        'lng' => 31.2580,
+        'address' => 'شارع 9، المعادي',
+        'phone' => '01012345678',
+        'name' => 'أحمد يحيى',
+        'payment_method_id' => $this->paymentMethodOnline->id,
+        'receipt' => $image,
+    ];
+
+    $res = $this->postJson('/api/user/orders/checkout', $payload)
+        ->assertStatus(201)
+        ->assertJsonPath('status', true);
+
+    $orderId = $res->json('data.id');
+    $order = Order::find($orderId);
+
+    expect($order->receipt)->not->toBeNull();
+    Storage::disk('public')->assertExists($order->receipt);
+
+    // Verify receipt URL in resource
+    $receiptUrl = $res->json('data.receipt');
+    expect($receiptUrl)->toBe(url('storage/'.$order->receipt));
+    expect($res->json('data.reciept'))->toBe(url('storage/'.$order->receipt));
 });

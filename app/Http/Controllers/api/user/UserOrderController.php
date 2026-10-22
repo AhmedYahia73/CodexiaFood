@@ -13,6 +13,7 @@ use App\Models\OrderPAddon;
 use App\Models\OrderPOption;
 use App\Models\OrderProduct;
 use App\Models\OrderPVariation;
+use App\Models\PaymentMethod;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipeStock;
 use App\Services\GeofenceService;
@@ -21,7 +22,9 @@ use App\Services\PriceCalculatorService;
 use App\Services\RestaurantWorkingHoursService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class UserOrderController extends Controller
 {
@@ -133,6 +136,61 @@ class UserOrderController extends Controller
     }
 
     /**
+     * Get active payment methods for order checkout.
+     */
+    public function paymentMethods(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Language preference (ar or en).
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $lang = $validated['lang']
+            ?? $request->query('lang')
+            ?? $request->header('lang')
+            ?? $request->header('Accept-Language')
+            ?? app()->getLocale();
+
+        $locale = str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
+
+        $paymentMethods = PaymentMethod::where('status', true)
+            ->get()
+            ->map(function (PaymentMethod $pm) use ($locale) {
+                $name = $pm->name;
+                $localizedName = is_array($name)
+                    ? ($name[$locale] ?? $name['ar'] ?? $name['en'] ?? '')
+                    : (is_string($name) ? $name : '');
+
+                $iconUrl = null;
+                if ($pm->icon) {
+                    if (str_starts_with($pm->icon, 'http://') || str_starts_with($pm->icon, 'https://')) {
+                        $iconUrl = $pm->icon;
+                    } else {
+                        $iconUrl = url('storage/'.ltrim($pm->icon, '/'));
+                    }
+                }
+
+                return [
+                    'id' => $pm->id,
+                    'name' => $localizedName,
+                    'is_cash' => (bool) $pm->is_cash,
+                    'icon' => $iconUrl,
+                ];
+            });
+
+        return response()->json([
+            'status' => true,
+            'data' => $paymentMethods,
+        ]);
+    }
+
+    /**
      * Checkout user cart items and place an online order.
      */
     public function checkout(Request $request): JsonResponse
@@ -147,6 +205,30 @@ class UserOrderController extends Controller
         if (! $request->has('uu_id') && $this->getUuId($request)) {
             $request->merge(['uu_id' => $this->getUuId($request)]);
         }
+
+        $lang = $request->input('lang')
+            ?? $request->query('lang')
+            ?? $request->header('lang')
+            ?? $request->header('Accept-Language')
+            ?? app()->getLocale();
+
+        $isEnglish = str_starts_with(strtolower((string) $lang), 'en');
+
+        $messages = $isEnglish ? [
+            'payment_method_id.required' => 'The payment method field is required.',
+            'payment_method_id.exists' => 'The selected payment method is invalid.',
+            'receipt.required' => 'The receipt image is required for cashless payment methods.',
+            'receipt.image' => 'The receipt must be an image.',
+            'receipt.mimes' => 'The receipt must be a file of type: jpeg, png, jpg, webp.',
+            'receipt.max' => 'The receipt image may not be greater than 5MB.',
+        ] : [
+            'payment_method_id.required' => 'يرجى اختيار طريقة الدفع.',
+            'payment_method_id.exists' => 'طريقة الدفع المختارة غير صالحة.',
+            'receipt.required' => 'إيصال الدفع مطلوب عند اختيار طريقة دفع غير نقدية.',
+            'receipt.image' => 'يجب أن يكون إيصال الدفع صورة.',
+            'receipt.mimes' => 'يجب أن تكون صورة الإيصال بصيغة: jpeg, png, jpg, webp.',
+            'receipt.max' => 'يجب ألا يتعدى حجم صورة الإيصال 5 ميجابايت.',
+        ];
 
         $validated = $request->validate([
             /**
@@ -233,12 +315,38 @@ class UserOrderController extends Controller
             /**
              * Payment Method ID.
              *
-             * @var int|null
+             * @var int
              *
              * @example 1
              */
-            'payment_method_id' => 'sometimes|nullable|exists:payment_methods,id',
-        ]);
+            'payment_method_id' => [
+                'required',
+                'integer',
+                'exists:payment_methods,id',
+            ],
+
+            /**
+             * Payment receipt image proof (required when payment method is not cash).
+             *
+             * @var UploadedFile|null
+             */
+            'receipt' => [
+                Rule::requiredIf(function () use ($request) {
+                    $paymentMethodId = $request->input('payment_method_id');
+                    if (! $paymentMethodId) {
+                        return false;
+                    }
+
+                    $paymentMethod = PaymentMethod::find($paymentMethodId);
+
+                    return $paymentMethod ? ! (bool) $paymentMethod->is_cash : false;
+                }),
+                'nullable',
+                'image',
+                'mimes:jpeg,png,jpg,webp',
+                'max:5120',
+            ],
+        ], $messages);
 
         $userLat = (float) $validated['lat'];
         $userLng = (float) $validated['lng'];
@@ -286,21 +394,25 @@ class UserOrderController extends Controller
         $module = $validated['module'] ?? 'delivery';
         $isDelivery = ($module === 'delivery');
 
-        $paymentMethodId = $validated['payment_method_id'] ?? null;
-        $isCash = false;
-        if ($paymentMethodId) {
-            $isCash = (bool) PaymentMethod::where('id', $paymentMethodId)->value('is_cash');
-        }
+        $paymentMethodId = (int) $validated['payment_method_id'];
+        $paymentMethod = PaymentMethod::find($paymentMethodId);
+        $isCash = $paymentMethod ? (bool) $paymentMethod->is_cash : false;
         $paid = ! ($isCash && $isDelivery);
 
+        $receiptPath = null;
+        if ($request->hasFile('receipt')) {
+            $receiptPath = $request->file('receipt')->store('orders/receipts', 'public');
+        }
+
         // 4. Create Order inside DB transaction
-        $order = DB::transaction(function () use ($validated, $paymentMethodId, $paid, $carts, $grandTotals, $branchId, $uuId): Order {
+        $order = DB::transaction(function () use ($validated, $paymentMethodId, $receiptPath, $paid, $carts, $grandTotals, $branchId, $uuId): Order {
             $order = Order::create([
                 'shift_id' => null,
                 'cashier_id' => null,
                 'cashier_man_id' => null,
                 'hall_table_id' => null,
                 'payment_method_id' => $paymentMethodId,
+                'receipt' => $receiptPath,
                 'paid' => $paid,
                 'branch_id' => $branchId,
                 'module' => $validated['module'] ?? 'delivery',
@@ -412,6 +524,7 @@ class UserOrderController extends Controller
 
         $order->load([
             'branch',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',
@@ -435,6 +548,7 @@ class UserOrderController extends Controller
     {
         $order->load([
             'branch',
+            'paymentMethod',
             'orderProducts.product',
             'orderProducts.variations.variation',
             'orderProducts.variations.options.option',

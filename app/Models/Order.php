@@ -19,6 +19,7 @@ class Order extends Model
         'financial_account_id',
         'delivery_id',
         'payment_method_id',
+        'receipt',
         'branch_id',
         'module',
         'address',
