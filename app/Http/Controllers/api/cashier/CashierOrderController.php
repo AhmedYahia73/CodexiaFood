@@ -464,13 +464,18 @@ class CashierOrderController extends Controller
 
             foreach ($carts as $cart) {
                 $qty = max(1, (int) $cart->quantity);
+                $isCartGift = (bool) ($cart->is_gift ?? false);
+                $productPrice = $isCartGift
+                    ? (float) ($cart->price ?? 1.00)
+                    : (float) ($cart->price ?? $cart->product->price);
 
                 $orderProduct = OrderProduct::create([
                     'order_id' => $order->id,
                     'product_id' => $cart->product_id,
                     'quantity' => $qty,
-                    'price' => (float) $cart->product->price,
+                    'price' => $productPrice,
                     'note' => $cart->notes,
+                    'is_gift' => $isCartGift,
                 ]);
 
                 foreach ($cart->variationCarts as $varCart) {
@@ -484,7 +489,7 @@ class CashierOrderController extends Controller
                         OrderPOption::create([
                             'order_p_variation_id' => $orderVariation->id,
                             'option_id' => $option->id,
-                            'price' => (float) $option->price,
+                            'price' => $isCartGift ? 0.00 : (float) $option->price,
                         ]);
                     }
                 }
@@ -494,7 +499,7 @@ class CashierOrderController extends Controller
                         OrderPAddon::create([
                             'order_product_id' => $orderProduct->id,
                             'addon_id' => $addonCart->addon_id,
-                            'price' => (float) $addonCart->addon->price,
+                            'price' => $isCartGift ? 0.00 : (float) $addonCart->addon->price,
                         ]);
                     }
                 }
@@ -698,7 +703,7 @@ class CashierOrderController extends Controller
     {
         $validated = $request->validate([
             'order_ids' => 'sometimes|array|min:1',
-            'order_ids.*' => 'integer|exists:orders,id', 
+            'order_ids.*' => 'integer|exists:orders,id',
         ]);
 
         $orderIds = $validated['order_ids'] ?? [];

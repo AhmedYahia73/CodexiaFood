@@ -25,18 +25,24 @@ class BusinessSetup extends Model
         'start_day',
         'end_day',
         'table_order_url',
+        'has_gift',
+        'price_gift',
     ];
 
     protected $attributes = [
         'branch_cover' => 5.00,
         'start_day' => '09:00:00',
         'end_day' => '03:00:00',
+        'has_gift' => false,
+        'price_gift' => 1,
     ];
 
     protected function casts(): array
     {
         return [
             'branch_cover' => 'decimal:2',
+            'has_gift' => 'boolean',
+            'price_gift' => 'integer',
         ];
     }
 

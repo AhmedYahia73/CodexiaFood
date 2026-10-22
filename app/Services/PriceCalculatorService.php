@@ -134,8 +134,19 @@ class PriceCalculatorService
     {
         $product = $cart->product;
         $qty = max(1, (int) $cart->quantity);
+        $isGift = (bool) ($cart->is_gift ?? false);
 
-        $productPricing = $this->calculateProduct($product);
+        if ($isGift) {
+            $giftPrice = (float) ($cart->price ?? 1.00);
+            $productPricing = [
+                'price' => $giftPrice,
+                'discount_val' => 0.00,
+                'tax_val' => 0.00,
+                'final_price' => $giftPrice,
+            ];
+        } else {
+            $productPricing = $this->calculateProduct($product);
+        }
 
         $sumOptionsPrice = 0.00;
         $sumOptionsDiscount = 0.00;
@@ -149,7 +160,17 @@ class PriceCalculatorService
 
             $optionsData = [];
             foreach ($options as $option) {
-                $optPricing = $this->calculateOption($option, $product->discount, $product->tax);
+                if ($isGift) {
+                    $optPricing = [
+                        'price' => 0.00,
+                        'discount_val' => 0.00,
+                        'tax_val' => 0.00,
+                        'final_price' => 0.00,
+                    ];
+                } else {
+                    $optPricing = $this->calculateOption($option, $product->discount, $product->tax);
+                }
+
                 $sumOptionsPrice += $optPricing['price'];
                 $sumOptionsDiscount += $optPricing['discount_val'];
                 $sumOptionsTax += $optPricing['tax_val'];
@@ -193,7 +214,17 @@ class PriceCalculatorService
                 continue;
             }
 
-            $addPricing = $this->calculateAddon($addon);
+            if ($isGift) {
+                $addPricing = [
+                    'price' => 0.00,
+                    'discount_val' => 0.00,
+                    'tax_val' => 0.00,
+                    'final_price' => 0.00,
+                ];
+            } else {
+                $addPricing = $this->calculateAddon($addon);
+            }
+
             $sumAddonsPrice += $addPricing['price'];
             $sumAddonsDiscount += $addPricing['discount_val'];
             $sumAddonsTax += $addPricing['tax_val'];
@@ -239,6 +270,8 @@ class PriceCalculatorService
             'table_id' => $cart->hall_table_id,
             'quantity' => $qty,
             'notes' => $cart->notes,
+            'is_gift' => $isGift,
+            'parent_id' => $cart->parent_id,
             'cashier_id' => $cart->cashier_id,
             'cashier_man_id' => $cart->cashier_man_id,
             'branch_id' => $cart->branch_id,

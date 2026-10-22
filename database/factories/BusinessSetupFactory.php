@@ -28,6 +28,8 @@ class BusinessSetupFactory extends Factory
             'branch_cover' => 5.00,
             'start_day' => '09:00:00',
             'end_day' => '03:00:00',
+            'has_gift' => false,
+            'price_gift' => 1,
         ];
     }
 }

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class OrderCart extends Model
 {
@@ -24,12 +25,17 @@ class OrderCart extends Model
         'quantity',
         'notes',
         'status',
+        'price',
+        'is_gift',
+        'parent_id',
     ];
 
     protected function casts(): array
     {
         return [
             'quantity' => 'integer',
+            'price' => 'decimal:2',
+            'is_gift' => 'boolean',
         ];
     }
 
@@ -80,5 +86,15 @@ class OrderCart extends Model
     public function kitchenOrders(): HasMany
     {
         return $this->hasMany(KitchenOrder::class);
+    }
+
+    public function gift(): HasOne
+    {
+        return $this->hasOne(OrderCart::class, 'parent_id');
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(OrderCart::class, 'parent_id');
     }
 }

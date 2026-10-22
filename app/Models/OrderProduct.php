@@ -17,6 +17,7 @@ class OrderProduct extends Model
         'quantity',
         'note',
         'price',
+        'is_gift',
     ];
 
     protected function casts(): array
@@ -24,6 +25,7 @@ class OrderProduct extends Model
         return [
             'quantity' => 'integer',
             'price' => 'decimal:2',
+            'is_gift' => 'boolean',
         ];
     }
 

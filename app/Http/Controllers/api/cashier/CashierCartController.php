@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api\cashier;
 
 use App\Http\Controllers\Controller;
+use App\Models\BusinessSetup;
 use App\Models\Cashier;
 use App\Models\MaterialStock;
 use App\Models\OrderAddonCart;
@@ -127,7 +128,7 @@ class CashierCartController extends Controller
         $query = $this->cartQuery($cashierId, $validated['module'] === 'dinein' ? $tableId : null)
             ->where('module', $validated['module']);
 
-        $carts = $query->latest('id')->get();
+        $carts = $query->orderByRaw('COALESCE(parent_id, id) ASC, id ASC')->get();
 
         $calculatedItems = $carts->map(
             fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale)
@@ -245,6 +246,10 @@ class CashierCartController extends Controller
         $cashier = Cashier::find($cashierId);
         $branchId = $cashier?->branch_id ?? auth()->user()?->branch_id;
 
+        $businessSetup = BusinessSetup::first();
+        $hasGift = (bool) ($businessSetup?->has_gift ?? false);
+        $priceGift = (int) ($businessSetup?->price_gift ?? 1);
+
         // Check stock of recipe ingredients unless without_recipe is true
         $withoutRecipe = $request->boolean('without_recipe');
         if (! $withoutRecipe && $branchId) {
@@ -257,7 +262,7 @@ class CashierCartController extends Controller
                 ->first();
 
             if ($spec && $spec->productRecipeManufacturings->isNotEmpty()) {
-                $requestedQty = max(1, (int) ($validated['quantity'] ?? 1));
+                $requestedQty = max(1, (int) ($validated['quantity'] ?? 1)) * ($hasGift ? 2 : 1);
 
                 foreach ($spec->productRecipeManufacturings as $recipeItem) {
                     $requiredQty = (float) $recipeItem->count * $requestedQty;
@@ -320,7 +325,7 @@ class CashierCartController extends Controller
 
         $locale = $this->getLocale($request);
 
-        $cart = DB::transaction(function () use ($validated, $tableId, $cashierId, $branchId): OrderCart {
+        $cart = DB::transaction(function () use ($validated, $tableId, $cashierId, $branchId, $hasGift, $priceGift): OrderCart {
             $cart = OrderCart::create([
                 'module' => $validated['module'],
                 'product_id' => $validated['product_id'],
@@ -330,6 +335,8 @@ class CashierCartController extends Controller
                 'hall_table_id' => $validated['module'] === 'dinein' ? $tableId : null,
                 'quantity' => $validated['quantity'] ?? 1,
                 'notes' => $validated['notes'] ?? null,
+                'price' => null,
+                'is_gift' => false,
             ]);
 
             foreach ($validated['variations'] ?? [] as $varData) {
@@ -345,6 +352,41 @@ class CashierCartController extends Controller
                     'order_cart_id' => $cart->id,
                     'addon_id' => $addonData['addon_id'],
                 ]);
+            }
+
+            if ($hasGift) {
+                $giftCart = OrderCart::create([
+                    'module' => $validated['module'],
+                    'product_id' => $validated['product_id'],
+                    'cashier_id' => $cashierId,
+                    'cashier_man_id' => auth()->id(),
+                    'branch_id' => $branchId,
+                    'hall_table_id' => $validated['module'] === 'dinein' ? $tableId : null,
+                    'quantity' => $validated['quantity'] ?? 1,
+                    'notes' => $validated['notes'] ?? null,
+                    'price' => $priceGift,
+                    'is_gift' => true,
+                    'parent_id' => $cart->id,
+                ]);
+
+                foreach ($validated['variations'] ?? [] as $varData) {
+                    OrderVariationCart::create([
+                        'order_cart_id' => $giftCart->id,
+                        'variation_id' => $varData['variation_id'],
+                        'option_ids' => $varData['option_ids'],
+                    ]);
+                }
+
+                foreach ($validated['addons'] ?? [] as $addonData) {
+                    OrderAddonCart::create([
+                        'order_cart_id' => $giftCart->id,
+                        'addon_id' => $addonData['addon_id'],
+                    ]);
+                }
+
+                if ($giftCart->module === 'dinein') {
+                    app(KitchenDispatchService::class)->dispatchFromCart($giftCart);
+                }
             }
 
             return $cart;
@@ -447,6 +489,34 @@ class CashierCartController extends Controller
                         'order_cart_id' => $cart->id,
                         'addon_id' => $addonData['addon_id'],
                     ]);
+                }
+            }
+
+            $gift = OrderCart::where('parent_id', $cart->id)->first();
+            if ($gift) {
+                if (! empty($updateData)) {
+                    $gift->update($updateData);
+                }
+
+                if (array_key_exists('variations', $validated)) {
+                    $gift->variationCarts()->delete();
+                    foreach ($validated['variations'] ?? [] as $varData) {
+                        OrderVariationCart::create([
+                            'order_cart_id' => $gift->id,
+                            'variation_id' => $varData['variation_id'],
+                            'option_ids' => $varData['option_ids'],
+                        ]);
+                    }
+                }
+
+                if (array_key_exists('addons', $validated)) {
+                    $gift->addonCarts()->delete();
+                    foreach ($validated['addons'] ?? [] as $addonData) {
+                        OrderAddonCart::create([
+                            'order_cart_id' => $gift->id,
+                            'addon_id' => $addonData['addon_id'],
+                        ]);
+                    }
                 }
             }
         });

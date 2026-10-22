@@ -33,6 +33,7 @@ class OrderProductResource extends JsonResource
             'name' => $localizedName,
             'name_translations' => is_array($productName) ? $productName : null,
             'price' => (float) $this->price,
+            'is_gift' => (bool) ($this->is_gift ?? false),
             'note' => $this->note,
             'product' => new ProductResource($this->whenLoaded('product')),
             'variations' => OrderPVariationResource::collection($this->whenLoaded('variations')),

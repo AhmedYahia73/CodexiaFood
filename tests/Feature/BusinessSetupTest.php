@@ -193,3 +193,27 @@ test('admin can update business setup using PUT and existing logo path string', 
     $this->assertDatabaseCount('business_setups', 1);
     expect($setup->fresh()->name)->toBe('الفرع الرئيسي المطور');
 });
+
+test('admin can set has_gift and price_gift keys in business setup', function () {
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم الهدايا',
+            'phone' => '01011112222',
+            'face' => 'https://facebook.com/gift',
+            'instagram' => 'https://instagram.com/gift',
+            'whats' => '01011112222',
+            'logo' => 'business_setup/gift_logo.png',
+            'description' => 'عروض هدايا مستمرة',
+            'has_gift' => true,
+            'price_gift' => 2,
+        ]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('data.has_gift', true)
+        ->assertJsonPath('data.price_gift', 2);
+
+    $setup = BusinessSetup::first();
+    expect($setup->has_gift)->toBeTrue()
+        ->and($setup->price_gift)->toBe(2);
+});

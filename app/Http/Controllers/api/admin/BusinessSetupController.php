@@ -50,7 +50,25 @@ class BusinessSetupController extends Controller
             'logo' => $request->hasFile('logo')
                 ? 'required|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096'
                 : 'required|string|max:255',
-            'table_order_url' => 'required|string|max:255',
+            'table_order_url' => 'sometimes|nullable|string|max:255',
+
+            /**
+             * Whether gift promotion is enabled.
+             *
+             * @var bool|null
+             *
+             * @example false
+             */
+            'has_gift' => 'sometimes|nullable|boolean',
+
+            /**
+             * Gift item price.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'price_gift' => 'sometimes|nullable|integer|min:0',
         ]);
 
         $logoPath = null;
@@ -78,6 +96,8 @@ class BusinessSetupController extends Controller
             'description' => $validated['description'],
             'branch_cover' => $validated['branch_cover'] ?? ($setup?->branch_cover ?? 5.00),
             'table_order_url' => $validated['table_order_url'] ?? ($setup?->table_order_url ?? null),
+            'has_gift' => array_key_exists('has_gift', $validated) ? (bool) $validated['has_gift'] : ($setup?->has_gift ?? false),
+            'price_gift' => array_key_exists('price_gift', $validated) && ! is_null($validated['price_gift']) ? (int) $validated['price_gift'] : ($setup?->price_gift ?? 1),
         ];
 
         if (array_key_exists('start_day', $validated)) {

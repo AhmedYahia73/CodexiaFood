@@ -2,9 +2,11 @@
 
 use App\Models\Addon;
 use App\Models\Branch;
+use App\Models\BusinessSetup;
 use App\Models\Cashier;
 use App\Models\CashierMan;
 use App\Models\Discount;
+use App\Models\FinancialAccount;
 use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Option;
@@ -405,4 +407,212 @@ test('cashier dinein cart requires table_id on store and isolates carts per tabl
         ->getJson('/api/cashier/cart?module=dinein&table_id='.$secondTable->id)
         ->assertStatus(200);
     expect($t2After->json('data'))->toHaveCount(1);
+});
+
+test('when has_gift is true, adding item adds original and gift item under each other at price_gift without tax or discount', function () {
+    BusinessSetup::create([
+        'name' => 'مطعم كودكسا',
+        'phone' => '01012345678',
+        'face' => 'https://facebook.com/codexa',
+        'instagram' => 'https://instagram.com/codexa',
+        'whats' => '01012345678',
+        'logo' => 'business_setup/logo.png',
+        'description' => 'وصف المطعم',
+        'has_gift' => true,
+        'price_gift' => 1,
+    ]);
+
+    // Product with price 40, no discount, no tax for clear math
+    $coffee = Product::create([
+        'name' => ['ar' => 'قهوة تركي', 'en' => 'Turkish Coffee'],
+        'description' => ['ar' => 'قهوة ممتازة', 'en' => 'Premium coffee'],
+        'price' => 40.00,
+        'image' => 'products/coffee.jpg',
+    ]);
+
+    $storeRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $coffee->id,
+            'quantity' => 4,
+            'notes' => 'سريعة',
+        ])
+        ->assertStatus(201);
+
+    // Get cart items
+    $cartRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=takeaway&lang=ar')
+        ->assertStatus(200);
+
+    $items = $cartRes->json('data');
+    expect($items)->toHaveCount(2);
+
+    // First item is regular: 4 coffee @ 40 = 160
+    $regularItem = $items[0];
+    expect($regularItem['is_gift'])->toBeFalse();
+    expect((float) $regularItem['product']['price'])->toBe(40.0);
+    expect((float) $regularItem['total_price'])->toBe(160.0);
+    expect((float) $regularItem['total_discount'])->toBe(0.0);
+    expect((float) $regularItem['total_tax'])->toBe(0.0);
+    expect((float) $regularItem['total_final_price'])->toBe(160.0);
+
+    // Second item (under it) is gift: 4 coffee @ 1 = 4, NO tax, NO discount!
+    $giftItem = $items[1];
+    expect($giftItem['is_gift'])->toBeTrue();
+    expect((float) $giftItem['product']['price'])->toBe(1.0);
+    expect((float) $giftItem['total_price'])->toBe(4.0);
+    expect((float) $giftItem['total_discount'])->toBe(0.0);
+    expect((float) $giftItem['total_tax'])->toBe(0.0);
+    expect((float) $giftItem['total_final_price'])->toBe(4.0);
+
+    // Grand totals: 160 + 4 = 164
+    $grand = $cartRes->json('grand_totals');
+    expect((float) $grand['grand_total_price'])->toBe(164.0);
+    expect((float) $grand['grand_total_discount'])->toBe(0.0);
+    expect((float) $grand['grand_total_tax'])->toBe(0.0);
+    expect((float) $grand['grand_final_price'])->toBe(164.0);
+});
+
+test('updating quantity of original cart item also updates the gift cart item', function () {
+    BusinessSetup::create([
+        'name' => 'مطعم كودكسا',
+        'phone' => '01012345678',
+        'face' => 'https://facebook.com/codexa',
+        'instagram' => 'https://instagram.com/codexa',
+        'whats' => '01012345678',
+        'logo' => 'business_setup/logo.png',
+        'description' => 'وصف المطعم',
+        'has_gift' => true,
+        'price_gift' => 1,
+    ]);
+
+    $coffee = Product::create([
+        'name' => ['ar' => 'قهوة تركي', 'en' => 'Turkish Coffee'],
+        'price' => 40.00,
+        'image' => 'products/coffee.jpg',
+    ]);
+
+    $storeRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $coffee->id,
+            'quantity' => 4,
+        ])
+        ->assertStatus(201);
+
+    $cartId = $storeRes->json('data.id');
+
+    // Update quantity to 6
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->putJson('/api/cashier/cart/'.$cartId, [
+            'quantity' => 6,
+        ])
+        ->assertStatus(200);
+
+    $cartRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=takeaway')
+        ->assertStatus(200);
+
+    $items = $cartRes->json('data');
+    expect($items)->toHaveCount(2);
+    expect($items[0]['quantity'])->toBe(6);
+    expect((float) $items[0]['total_final_price'])->toBe(240.0);
+    expect($items[1]['quantity'])->toBe(6);
+    expect((float) $items[1]['total_final_price'])->toBe(6.0);
+});
+
+test('deleting original cart item cascades and deletes the gift item', function () {
+    BusinessSetup::create([
+        'name' => 'مطعم كودكسا',
+        'phone' => '01012345678',
+        'face' => 'https://facebook.com/codexa',
+        'instagram' => 'https://instagram.com/codexa',
+        'whats' => '01012345678',
+        'logo' => 'business_setup/logo.png',
+        'description' => 'وصف المطعم',
+        'has_gift' => true,
+        'price_gift' => 1,
+    ]);
+
+    $coffee = Product::create([
+        'name' => ['ar' => 'قهوة تركي', 'en' => 'Turkish Coffee'],
+        'price' => 40.00,
+        'image' => 'products/coffee.jpg',
+    ]);
+
+    $storeRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $coffee->id,
+            'quantity' => 4,
+        ])
+        ->assertStatus(201);
+
+    $cartId = $storeRes->json('data.id');
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->deleteJson('/api/cashier/cart/'.$cartId)
+        ->assertStatus(200);
+
+    $cartRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=takeaway')
+        ->assertStatus(200);
+
+    expect($cartRes->json('data'))->toBeEmpty();
+});
+
+test('checking out with gift items creates correct order products with price_gift and is_gift', function () {
+    BusinessSetup::create([
+        'name' => 'مطعم كودكسا',
+        'phone' => '01012345678',
+        'face' => 'https://facebook.com/codexa',
+        'instagram' => 'https://instagram.com/codexa',
+        'whats' => '01012345678',
+        'logo' => 'business_setup/logo.png',
+        'description' => 'وصف المطعم',
+        'has_gift' => true,
+        'price_gift' => 1,
+    ]);
+
+    $coffee = Product::create([
+        'name' => ['ar' => 'قهوة تركي', 'en' => 'Turkish Coffee'],
+        'price' => 40.00,
+        'image' => 'products/coffee.jpg',
+    ]);
+
+    $account = FinancialAccount::create([
+        'name' => ['ar' => 'خزينة رئيسية', 'en' => 'Main Cash'],
+        'status' => true,
+        'balance' => 0.00,
+        'branch_id' => $this->branch->id,
+    ]);
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $coffee->id,
+            'quantity' => 4,
+        ])
+        ->assertStatus(201);
+
+    $checkoutRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/orders/checkout', [
+            'module' => 'takeaway',
+            'financial_account_id' => $account->id,
+        ])
+        ->assertStatus(201);
+
+    $orderData = $checkoutRes->json('data');
+    expect((float) $orderData['final_price'])->toBe(164.0);
+    expect($orderData['products'])->toHaveCount(2);
+
+    $regProduct = $orderData['products'][0];
+    expect((float) $regProduct['price'])->toBe(40.0);
+    expect($regProduct['is_gift'])->toBeFalse();
+    expect($regProduct['quantity'])->toBe(4);
+
+    $giftProduct = $orderData['products'][1];
+    expect((float) $giftProduct['price'])->toBe(1.0);
+    expect($giftProduct['is_gift'])->toBeTrue();
+    expect($giftProduct['quantity'])->toBe(4);
 });
