@@ -8,6 +8,7 @@ use App\Models\Branch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -125,7 +126,10 @@ class BranchController extends Controller
 
     public function destroy(Branch $branch): JsonResponse
     {
-        $branch->delete();
+        DB::transaction(function () use ($branch) {
+            $branch->sales()->delete();
+            $branch->delete();
+        });
 
         return response()->json([
             'status' => true,

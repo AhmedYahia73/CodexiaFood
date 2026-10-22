@@ -16,6 +16,7 @@
    - [جلب قائمة الإضافات (Addons)](#25-جلب-قائمة-الإضافات-get-apiuseraddons)
    - [إعدادات وبيانات المتجر ونطاق التغطية (Business Setup)](#26-بيانات-المتجر-ونطاق-التغطية-get-apiuserbusiness-setup)
    - [طرق الدفع النشطة للطلب (Payment Methods)](#27-طرق-الدفع-النشطة-للطلب-get-apiuserpayment-methods)
+   - [صور المنيو وقائمة الطعام (Menu Images)](#28-جلب-صور-المنيو-get-apiusermenu)
 3. [واجهات سلة المشتريات (Cart APIs)](#3-واجهات-سلة-المشتريات-cart-apis)
    - [عرض عناصر السلة والإجماليات (Get Cart)](#31-عرض-عناصر-السلة-get-apiusercart)
    - [إضافة منتج إلى السلة (Add to Cart)](#32-إضافة-منتج-إلى-السلة-post-apiusercart)
@@ -244,6 +245,14 @@
     "whats": "01012345678",
     "logo": "http://your-domain/storage/business_setup/logo.png",
     "raw_logo": "business_setup/logo.png",
+    "menu": [
+      "http://your-domain/storage/business_setup/menu_page_1.webp",
+      "http://your-domain/storage/business_setup/menu_page_2.webp"
+    ],
+    "raw_menu": [
+      "business_setup/menu_page_1.webp",
+      "business_setup/menu_page_2.webp"
+    ],
     "description": "أفضل تجربة طعام لجميع العائلة",
     "branch_cover": 5.00,
     "created_at": "2026-09-28T04:00:00Z",
@@ -284,6 +293,30 @@
 ```
 
 > **ملاحظة هامة للفرونت إند**: حقل `is_cash` يوضح ما إذا كانت طريقة الدفع كاش أو إلكترونية. إذا كانت `is_cash: false`، يجب إظهار حقل رفع صورة إيصال التحويل (`receipt`) وإرساله مع طلب إتمام الطلب (Checkout).
+
+---
+
+### 2.8. جلب صور المنيو
+* **Method**: `GET`
+* **URL**: `/api/user/menu`
+* **Authentication**: **None** (بدون توثيق)
+* **Query Parameters**:
+  | Parameter | Type | Required | Description | Example |
+  |---|---|---|---|---|
+  | `lang` | string | اختياري | لغة الاستجابة | `ar` |
+
+* **Response Example (200 OK)**:
+```json
+{
+  "status": true,
+  "data": [
+    "http://your-domain/storage/business_setup/menu_page_1.webp",
+    "http://your-domain/storage/business_setup/menu_page_2.webp"
+  ]
+}
+```
+
+> **ملاحظة**: إذا لم يكن هناك صور منيو مسجلة، ستُرجع الواجهة مصفوفة فارغة `[]` بنجاح دون أي خطأ. للمزيد من التفاصيل راجع ملف التوثيق المخصص: `docs/USER_MENU_API.md`.
 
 ---
 
