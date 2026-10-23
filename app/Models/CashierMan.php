@@ -25,11 +25,34 @@ class CashierMan extends Authenticatable implements JWTSubject
 
     protected $appends = [
         'role',
+        'branch_name',
     ];
 
-    public function getRoleAttribute()
+    public function getRoleAttribute(): string
     {
         return 'cashier_man';
+    }
+
+    public function getBranchNameAttribute(): ?string
+    {
+        $branch = $this->relationLoaded('branch') ? $this->branch : $this->branch()->first();
+        if (! $branch) {
+            return null;
+        }
+
+        $name = $branch->name;
+        if (is_array($name)) {
+            $lang = request()?->query('lang')
+                ?? request()?->input('lang')
+                ?? request()?->header('lang')
+                ?? request()?->header('Accept-Language')
+                ?? app()->getLocale();
+            $locale = str_starts_with(strtolower((string) $lang), 'ar') ? 'ar' : 'en';
+
+            return $name[$locale] ?? $name['ar'] ?? $name['en'] ?? (isset($name[0]) && is_string($name[0]) ? $name[0] : null);
+        }
+
+        return is_string($name) ? $name : null;
     }
 
     protected $hidden = [

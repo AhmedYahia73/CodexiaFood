@@ -126,14 +126,16 @@ class AuthController extends Controller
     {
         /** @var JWTGuard $jwtGuard */
         $jwtGuard = Auth::guard($guard);
+        $ttlMinutes = (int) $jwtGuard->factory()->getTTL();
 
         return response()->json([
             'status' => true,
             'message' => 'Successfully authenticated',
             'data' => [
                 'access_token' => $token,
-                'token_type' => 'bearer',
-                'expires_in' => $jwtGuard->factory()->getTTL() * 60,
+                'token_type' => 'Bearer',
+                'expires_at' => now()->addMinutes($ttlMinutes)->toIso8601String(),
+                'expires_in' => $ttlMinutes * 60,
                 'guard' => $guard,
                 'user' => $jwtGuard->user(),
             ],
