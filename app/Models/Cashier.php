@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Cashier extends Model
 {
@@ -30,5 +31,15 @@ class Cashier extends Model
     public function expenses(): HasMany
     {
         return $this->hasMany(Expense::class);
+    }
+
+    public function startShifts(): HasMany
+    {
+        return $this->hasMany(StartShift::class);
+    }
+
+    public function activeStartShift(): HasOne
+    {
+        return $this->hasOne(StartShift::class)->whereNull('end')->latestOfMany('start');
     }
 }
