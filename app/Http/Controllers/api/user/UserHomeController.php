@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api\user;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BusinessSetupResource;
 use App\Models\Addon;
+use App\Models\Banner;
 use App\Models\BusinessSetup;
 use App\Models\Category;
 use App\Models\Product;
@@ -446,6 +447,36 @@ class UserHomeController extends Controller
         return response()->json([
             'status' => true,
             'data' => $menuUrls,
+        ]);
+    }
+
+    /**
+     * Get all banners for public users.
+     */
+    public function banners(Request $request): JsonResponse
+    {
+        $request->validate([
+            /**
+             * Response language ('ar' or 'en').
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $banners = Banner::latest('id')
+            ->get()
+            ->map(fn (Banner $banner) => [
+                'id' => $banner->id,
+                'image' => $this->formatImageUrl($banner->image),
+                'created_at' => $banner->created_at?->toIso8601String(),
+            ]);
+
+        return response()->json([
+            'status' => true,
+            'data' => $banners,
         ]);
     }
 }

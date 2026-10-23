@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\api\admin\AddonController;
 use App\Http\Controllers\api\admin\AdminController;
+use App\Http\Controllers\api\admin\BannerController;
 use App\Http\Controllers\api\admin\BranchController;
 use App\Http\Controllers\api\admin\BusinessSetupController;
 use App\Http\Controllers\api\admin\CashierController;
@@ -141,6 +142,7 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::match(['put', 'patch', 'post'], 'addons/{addon}', [AddonController::class, 'update']);
     Route::apiResource('addons', AddonController::class);
     Route::apiResource('admins', AdminController::class);
+    Route::apiResource('banners', BannerController::class)->except(['update']);
     Route::apiResource('branches', BranchController::class);
     Route::apiResource('cashier-men', CashierManController::class);
     Route::apiResource('cashiers', CashierController::class);
@@ -385,6 +387,7 @@ Route::prefix('user')->group(function () {
     Route::get('products/{product}', [UserHomeController::class, 'productDetails']);
     Route::get('addons', [UserHomeController::class, 'addons']);
     Route::get('business-setup', [UserHomeController::class, 'businessSetup']);
+    Route::get('banners', [UserHomeController::class, 'banners']);
     Route::get('menu', [UserHomeController::class, 'menu']);
     Route::get('payment-methods', [UserOrderController::class, 'paymentMethods']);
 
