@@ -169,8 +169,7 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('manufacturing/{manufacturingList}', [ManufactringController::class, 'show']);
 
     Route::get('business-setup', [BusinessSetupController::class, 'index']);
-    Route::post('business-setup', [BusinessSetupController::class, 'update']);
-    Route::put('business-setup/{businessSetup?}', [BusinessSetupController::class, 'update']);
+    Route::match(['put', 'patch', 'post'], 'business-setup/{businessSetup?}', [BusinessSetupController::class, 'update']);
 
     // Inventory routes for Product Recipes
     Route::prefix('inventory/recipes')->group(function () {

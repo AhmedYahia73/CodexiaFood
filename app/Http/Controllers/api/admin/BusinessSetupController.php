@@ -38,10 +38,24 @@ class BusinessSetupController extends Controller
     {
         $setup = ($businessSetup && $businessSetup->exists) ? $businessSetup : BusinessSetup::first();
 
-        if (is_string($request->input('menu'))) {
-            $decoded = json_decode($request->input('menu'), true);
-            if (is_array($decoded) || is_null($decoded)) {
-                $request->merge(['menu' => $decoded]);
+        foreach (['deleted_menu', 'delete_menu'] as $delKey) {
+            if ($request->has($delKey) && is_string($request->input($delKey))) {
+                $rawVal = $request->input($delKey);
+                $decoded = json_decode($rawVal, true);
+                if (is_array($decoded)) {
+                    $request->merge([$delKey => $decoded]);
+                } elseif (trim($rawVal) !== '') {
+                    $request->merge([$delKey => [$rawVal]]);
+                }
+            }
+        }
+
+        foreach (['menu', 'new_menu'] as $menuKey) {
+            if (is_string($request->input($menuKey))) {
+                $decoded = json_decode($request->input($menuKey), true);
+                if (is_array($decoded) || is_null($decoded)) {
+                    $request->merge([$menuKey => $decoded]);
+                }
             }
         }
 
@@ -87,6 +101,34 @@ class BusinessSetupController extends Controller
              */
             'menu' => 'sometimes|nullable|array',
             'menu.*' => 'nullable',
+
+            /**
+             * New menu images to append to current menu.
+             *
+             * @var array<string>|null
+             */
+            'new_menu' => 'sometimes|nullable|array',
+            'new_menu.*' => 'nullable',
+
+            /**
+             * Array of menu image paths, URLs, or indices to delete from the menu.
+             *
+             * @var array<string>|null
+             *
+             * @example ["business_setup/menu1.png"]
+             */
+            'deleted_menu' => 'sometimes|nullable|array',
+            'deleted_menu.*' => 'nullable',
+
+            /**
+             * Alias for deleted_menu.
+             *
+             * @var array<string>|null
+             *
+             * @example ["business_setup/menu1.png"]
+             */
+            'delete_menu' => 'sometimes|nullable|array',
+            'delete_menu.*' => 'nullable',
         ]);
 
         $logoPath = null;
@@ -129,49 +171,124 @@ class BusinessSetupController extends Controller
             $data['logo'] = $logoPath;
         }
 
-        if (array_key_exists('menu', $validated) || $request->hasFile('menu')) {
-            $rawMenu = $request->all()['menu'] ?? null;
+        $currentMenu = ($setup && is_array($setup->menu)) ? $setup->menu : [];
+        $menuModified = false;
 
-            if (is_null($rawMenu)) {
-                $data['menu'] = null;
-                if ($setup && is_array($setup->menu)) {
-                    foreach ($setup->menu as $oldImage) {
-                        $oldPath = str_contains($oldImage, '/storage/')
-                            ? substr($oldImage, strpos($oldImage, '/storage/') + strlen('/storage/'))
-                            : $oldImage;
-                        $this->deleteImage($oldPath);
-                    }
-                }
-            } else {
-                $processedMenu = [];
-                $menuItems = is_array($rawMenu) ? $rawMenu : [$rawMenu];
+        // 1. Process deletions via deleted_menu / delete_menu
+        $deletedMenuInput = $request->input('deleted_menu') ?? $request->input('delete_menu');
+        if (! empty($deletedMenuInput)) {
+            $deletedItems = is_array($deletedMenuInput) ? $deletedMenuInput : [$deletedMenuInput];
 
-                foreach ($menuItems as $key => $item) {
-                    if ($item instanceof UploadedFile) {
-                        $processedMenu[] = $item->store('business_setup', 'public');
-                    } elseif ($request->hasFile("menu.{$key}")) {
-                        $processedMenu[] = $request->file("menu.{$key}")->store('business_setup', 'public');
-                    } elseif (is_string($item) && trim($item) !== '') {
-                        if (str_contains($item, '/storage/')) {
-                            $processedMenu[] = substr($item, strpos($item, '/storage/') + strlen('/storage/'));
-                        } else {
-                            $processedMenu[] = $item;
-                        }
-                    }
+            foreach ($deletedItems as $del) {
+                if (is_null($del) || $del === '') {
+                    continue;
                 }
 
-                $data['menu'] = $processedMenu;
+                $delPath = (string) $del;
+                if (str_contains($delPath, '/storage/')) {
+                    $delPath = substr($delPath, strpos($delPath, '/storage/') + strlen('/storage/'));
+                }
+                $delPath = ltrim($delPath, '/');
 
-                if ($setup && is_array($setup->menu)) {
-                    $removedImages = array_diff($setup->menu, $processedMenu);
-                    foreach ($removedImages as $removed) {
-                        $removedPath = str_contains($removed, '/storage/')
-                            ? substr($removed, strpos($removed, '/storage/') + strlen('/storage/'))
-                            : $removed;
-                        $this->deleteImage($removedPath);
+                foreach ($currentMenu as $idx => $existingItem) {
+                    $normExisting = str_contains($existingItem, '/storage/')
+                        ? substr($existingItem, strpos($existingItem, '/storage/') + strlen('/storage/'))
+                        : $existingItem;
+                    $normExisting = ltrim($normExisting, '/');
+
+                    if ($normExisting === $delPath || (string) $idx === (string) $del) {
+                        $this->deleteImage($normExisting);
+                        unset($currentMenu[$idx]);
+                        $menuModified = true;
                     }
                 }
             }
+            $currentMenu = array_values($currentMenu);
+        }
+
+        // 2. Process menu additions or replacements
+        $hasMenuKey = array_key_exists('menu', $request->all()) || $request->hasFile('menu');
+
+        if ($hasMenuKey) {
+            $rawMenu = $request->all()['menu'] ?? null;
+
+            if (is_null($rawMenu) && ! $request->hasFile('menu')) {
+                foreach ($currentMenu as $oldImg) {
+                    $oldPath = str_contains($oldImg, '/storage/')
+                        ? substr($oldImg, strpos($oldImg, '/storage/') + strlen('/storage/'))
+                        : $oldImg;
+                    $this->deleteImage(ltrim($oldPath, '/'));
+                }
+                $currentMenu = null;
+                $menuModified = true;
+            } elseif (is_array($rawMenu) && empty($rawMenu) && ! $request->hasFile('menu')) {
+                foreach ($currentMenu as $oldImg) {
+                    $oldPath = str_contains($oldImg, '/storage/')
+                        ? substr($oldImg, strpos($oldImg, '/storage/') + strlen('/storage/'))
+                        : $oldImg;
+                    $this->deleteImage(ltrim($oldPath, '/'));
+                }
+                $currentMenu = [];
+                $menuModified = true;
+            } else {
+                $menuItems = is_array($rawMenu) ? $rawMenu : ($rawMenu ? [$rawMenu] : []);
+                $existingStringsInRequest = [];
+                $newUploadedFiles = [];
+
+                foreach ($menuItems as $key => $item) {
+                    if ($item instanceof UploadedFile) {
+                        $newUploadedFiles[] = $item->store('business_setup', 'public');
+                    } elseif ($request->hasFile("menu.{$key}")) {
+                        $newUploadedFiles[] = $request->file("menu.{$key}")->store('business_setup', 'public');
+                    } elseif (is_string($item) && trim($item) !== '') {
+                        $norm = str_contains($item, '/storage/')
+                            ? substr($item, strpos($item, '/storage/') + strlen('/storage/'))
+                            : $item;
+                        $existingStringsInRequest[] = ltrim($norm, '/');
+                    }
+                }
+
+                // If only files were uploaded, append them to current menu
+                if (! empty($newUploadedFiles) && empty($existingStringsInRequest)) {
+                    $currentMenu = array_merge($currentMenu, $newUploadedFiles);
+                    $menuModified = true;
+                }
+                // If existing strings were passed in menu, use them + new files and delete omitted ones
+                elseif (! empty($existingStringsInRequest)) {
+                    foreach ($currentMenu as $oldImg) {
+                        $oldNorm = str_contains($oldImg, '/storage/')
+                            ? substr($oldImg, strpos($oldImg, '/storage/') + strlen('/storage/'))
+                            : $oldImg;
+                        $oldNorm = ltrim($oldNorm, '/');
+
+                        if (! in_array($oldNorm, $existingStringsInRequest, true)) {
+                            $this->deleteImage($oldNorm);
+                        }
+                    }
+                    $currentMenu = array_merge($existingStringsInRequest, $newUploadedFiles);
+                    $menuModified = true;
+                }
+            }
+        }
+
+        // 3. Process new_menu if provided explicitly as an append key
+        if ($request->hasFile('new_menu') || $request->has('new_menu')) {
+            $rawNewMenu = $request->all()['new_menu'] ?? [];
+            $newMenuItems = is_array($rawNewMenu) ? $rawNewMenu : [$rawNewMenu];
+
+            foreach ($newMenuItems as $key => $item) {
+                if ($item instanceof UploadedFile) {
+                    $currentMenu[] = $item->store('business_setup', 'public');
+                    $menuModified = true;
+                } elseif ($request->hasFile("new_menu.{$key}")) {
+                    $currentMenu[] = $request->file("new_menu.{$key}")->store('business_setup', 'public');
+                    $menuModified = true;
+                }
+            }
+        }
+
+        if ($menuModified) {
+            $data['menu'] = is_array($currentMenu) ? array_values($currentMenu) : null;
         }
 
         $isNew = ! $setup;

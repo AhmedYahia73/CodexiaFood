@@ -342,3 +342,98 @@ test('admin can set menu to null or empty array', function () {
     Storage::disk('public')->assertMissing($storedPath);
     expect($setup->fresh()->menu)->toBeNull();
 });
+
+test('admin can delete specific image from menu using deleted_menu key', function () {
+    Storage::fake('public');
+
+    $file1 = UploadedFile::fake()->image('page1.png');
+    $file2 = UploadedFile::fake()->image('page2.png');
+
+    $createResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم فحص حذف المنيو',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/test',
+            'instagram' => 'https://instagram.com/test',
+            'whats' => '01012345678',
+            'logo' => UploadedFile::fake()->image('logo.png'),
+            'description' => 'وصف',
+            'menu' => [$file1, $file2],
+        ])->assertStatus(200);
+
+    $setup = BusinessSetup::first();
+    expect($setup->menu)->toHaveCount(2);
+    $imgToDelete = $setup->menu[0];
+    $imgToKeep = $setup->menu[1];
+
+    Storage::disk('public')->assertExists($imgToDelete);
+    Storage::disk('public')->assertExists($imgToKeep);
+
+    // Call update on business-setup/1 using deleted_menu with full URL or relative path
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup/'.$setup->id, [
+            'name' => 'مطعم فحص حذف المنيو',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/test',
+            'instagram' => 'https://instagram.com/test',
+            'whats' => '01012345678',
+            'logo' => $setup->logo,
+            'description' => 'وصف',
+            'deleted_menu' => [url('storage/'.$imgToDelete)],
+        ]);
+
+    $response->assertStatus(200);
+
+    Storage::disk('public')->assertMissing($imgToDelete);
+    Storage::disk('public')->assertExists($imgToKeep);
+
+    $freshMenu = $setup->fresh()->menu;
+    expect($freshMenu)->toHaveCount(1)
+        ->and($freshMenu)->toContain($imgToKeep)
+        ->and($freshMenu)->not->toContain($imgToDelete);
+});
+
+test('admin can append a new image to existing menu images without replacing them', function () {
+    Storage::fake('public');
+
+    $file1 = UploadedFile::fake()->image('page1.png');
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم الإضافة للمنيو',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/test',
+            'instagram' => 'https://instagram.com/test',
+            'whats' => '01012345678',
+            'logo' => UploadedFile::fake()->image('logo.png'),
+            'description' => 'وصف',
+            'menu' => [$file1],
+        ])->assertStatus(200);
+
+    $setup = BusinessSetup::first();
+    $firstImagePath = $setup->menu[0];
+
+    // Upload a second image to append to the existing menu
+    $file2 = UploadedFile::fake()->image('page2.png');
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup/'.$setup->id, [
+            'name' => 'مطعم الإضافة للمنيو',
+            'phone' => '01012345678',
+            'face' => 'https://facebook.com/test',
+            'instagram' => 'https://instagram.com/test',
+            'whats' => '01012345678',
+            'logo' => $setup->logo,
+            'description' => 'وصف',
+            'menu' => [$file2],
+        ]);
+
+    $response->assertStatus(200);
+
+    $freshMenu = $setup->fresh()->menu;
+    expect($freshMenu)->toHaveCount(2)
+        ->and($freshMenu)->toContain($firstImagePath);
+
+    Storage::disk('public')->assertExists($firstImagePath);
+    Storage::disk('public')->assertExists($freshMenu[1]);
+});
