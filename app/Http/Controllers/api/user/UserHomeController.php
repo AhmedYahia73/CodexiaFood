@@ -55,15 +55,43 @@ class UserHomeController extends Controller
      */
     public function parentCategories(Request $request): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
+            /**
+             * Search keyword to filter parent categories by name or description.
+             *
+             * @var string|null
+             *
+             * @example "burger"
+             */
+            'search' => 'sometimes|nullable|string|max:255',
+            /**
+             * Response language ('ar' or 'en').
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
             'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
 
-        $categories = Category::whereNull('category_id')
-            ->where('status', true)
-            ->latest()
+        $query = Category::whereNull('category_id')
+            ->where('status', true);
+
+        if (! empty($validated['search'])) {
+            $search = trim((string) $validated['search']);
+            $query->where(function ($q) use ($search) {
+                $q->where('name->ar', 'like', "%{$search}%")
+                    ->orWhere('name->en', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('description->ar', 'like', "%{$search}%")
+                    ->orWhere('description->en', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        $categories = $query->latest()
             ->get()
             ->map(fn (Category $category) => [
                 'id' => $category->id,
@@ -86,7 +114,29 @@ class UserHomeController extends Controller
     public function subCategories(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            /**
+             * Category ID to filter sub categories.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
             'category_id' => 'sometimes|nullable|integer|exists:categories,id',
+            /**
+             * Search keyword to filter sub categories by name or description.
+             *
+             * @var string|null
+             *
+             * @example "burger"
+             */
+            'search' => 'sometimes|nullable|string|max:255',
+            /**
+             * Response language ('ar' or 'en').
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
             'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
@@ -96,6 +146,18 @@ class UserHomeController extends Controller
 
         if (! empty($validated['category_id'])) {
             $query->where('category_id', $validated['category_id']);
+        }
+
+        if (! empty($validated['search'])) {
+            $search = trim((string) $validated['search']);
+            $query->where(function ($q) use ($search) {
+                $q->where('name->ar', 'like', "%{$search}%")
+                    ->orWhere('name->en', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('description->ar', 'like', "%{$search}%")
+                    ->orWhere('description->en', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
         }
 
         $categories = $query->latest()
@@ -122,8 +184,37 @@ class UserHomeController extends Controller
     public function products(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            /**
+             * Category ID to filter products.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
             'category_id' => 'sometimes|nullable|integer|exists:categories,id',
+            /**
+             * Sub category ID to filter products.
+             *
+             * @var int|null
+             *
+             * @example 2
+             */
             'sub_category_id' => 'sometimes|nullable|integer|exists:categories,id',
+            /**
+             * Search keyword to filter products by name or description.
+             *
+             * @var string|null
+             *
+             * @example "burger"
+             */
+            'search' => 'sometimes|nullable|string|max:255',
+            /**
+             * Response language ('ar' or 'en').
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
             'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
@@ -137,6 +228,18 @@ class UserHomeController extends Controller
 
         if (! empty($validated['sub_category_id'])) {
             $query->where('sub_category_id', $validated['sub_category_id']);
+        }
+
+        if (! empty($validated['search'])) {
+            $search = trim((string) $validated['search']);
+            $query->where(function ($q) use ($search) {
+                $q->where('name->ar', 'like', "%{$search}%")
+                    ->orWhere('name->en', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('description->ar', 'like', "%{$search}%")
+                    ->orWhere('description->en', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
         }
 
         $products = $query->get()->map(function (Product $product) use ($locale) {
@@ -242,14 +345,39 @@ class UserHomeController extends Controller
      */
     public function addons(Request $request): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
+            /**
+             * Search keyword to filter addons by name.
+             *
+             * @var string|null
+             *
+             * @example "sauce"
+             */
+            'search' => 'sometimes|nullable|string|max:255',
+            /**
+             * Response language ('ar' or 'en').
+             *
+             * @var string|null
+             *
+             * @example "ar"
+             */
             'lang' => 'sometimes|nullable|string|in:ar,en',
         ]);
 
         $locale = $this->getLocale($request);
 
-        $addons = Addon::with(['discount', 'tax'])
-            ->get()
+        $query = Addon::with(['discount', 'tax']);
+
+        if (! empty($validated['search'])) {
+            $search = trim((string) $validated['search']);
+            $query->where(function ($q) use ($search) {
+                $q->where('name->ar', 'like', "%{$search}%")
+                    ->orWhere('name->en', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%");
+            });
+        }
+
+        $addons = $query->get()
             ->map(function (Addon $addon) use ($locale) {
                 $pricing = $this->priceCalculator->calculateAddon($addon);
 

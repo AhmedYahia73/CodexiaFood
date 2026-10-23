@@ -230,3 +230,106 @@ test('public user receives empty array when no menu images exist', function () {
             'data' => [],
         ]);
 });
+
+test('public user can search parent categories by search key', function () {
+    Category::create([
+        'name' => ['ar' => 'مشروبات ساخنة', 'en' => 'Hot Drinks'],
+        'description' => ['ar' => 'شاي وقهوة', 'en' => 'Tea and coffee'],
+        'category_id' => null,
+        'image' => 'categories/hot_drinks.jpg',
+        'status' => true,
+    ]);
+
+    $response = $this->getJson('/api/user/categories/parents?search=مشروبات&lang=ar')
+        ->assertStatus(200);
+
+    expect($response->json('data'))->toHaveCount(1)
+        ->and($response->json('data.0.name'))->toBe('مشروبات ساخنة');
+
+    $enResponse = $this->getJson('/api/user/categories/parents?search=Drinks&lang=en')
+        ->assertStatus(200);
+
+    expect($enResponse->json('data'))->toHaveCount(1)
+        ->and($enResponse->json('data.0.name'))->toBe('Hot Drinks');
+
+    $emptyResponse = $this->getJson('/api/user/categories/parents?search=NonExistentKey')
+        ->assertStatus(200);
+
+    expect($emptyResponse->json('data'))->toHaveCount(0);
+});
+
+test('public user can search sub categories by search key', function () {
+    Category::create([
+        'category_id' => $this->parentCat->id,
+        'name' => ['ar' => 'بيتزا', 'en' => 'Pizza'],
+        'description' => ['ar' => 'بيتزا إيطالية', 'en' => 'Italian Pizza'],
+        'image' => 'categories/pizza.jpg',
+        'status' => true,
+    ]);
+
+    $response = $this->getJson('/api/user/categories/sub?search=بيتزا&lang=ar')
+        ->assertStatus(200);
+
+    expect($response->json('data'))->toHaveCount(1)
+        ->and($response->json('data.0.name'))->toBe('بيتزا');
+
+    $enResponse = $this->getJson('/api/user/categories/sub?search=Pizza&lang=en')
+        ->assertStatus(200);
+
+    expect($enResponse->json('data'))->toHaveCount(1)
+        ->and($enResponse->json('data.0.name'))->toBe('Pizza');
+});
+
+test('public user can search products by search key', function () {
+    Product::create([
+        'name' => ['ar' => 'بيتزا خضار', 'en' => 'Veggie Pizza'],
+        'description' => ['ar' => 'بيتزا طازجة', 'en' => 'Fresh pizza'],
+        'category_id' => $this->parentCat->id,
+        'sub_category_id' => $this->subCat->id,
+        'image' => 'products/veggie_pizza.jpg',
+        'price' => 80.00,
+        'stock' => 20,
+    ]);
+
+    $response = $this->getJson('/api/user/products?search=خضار&lang=ar')
+        ->assertStatus(200);
+
+    expect($response->json('data'))->toHaveCount(1)
+        ->and($response->json('data.0.name'))->toBe('بيتزا خضار');
+
+    $enResponse = $this->getJson('/api/user/products?search=Veggie&lang=en')
+        ->assertStatus(200);
+
+    expect($enResponse->json('data'))->toHaveCount(1)
+        ->and($enResponse->json('data.0.name'))->toBe('Veggie Pizza');
+
+    $noMatchResponse = $this->getJson('/api/user/products?search=RandomKeyword123')
+        ->assertStatus(200);
+
+    expect($noMatchResponse->json('data'))->toHaveCount(0);
+});
+
+test('public user can search addons by search key', function () {
+    Addon::create([
+        'name' => ['ar' => 'صوص جبنة', 'en' => 'Cheese Sauce'],
+        'image' => 'addons/cheese.jpg',
+        'price' => 15.00,
+    ]);
+
+    $response = $this->getJson('/api/user/addons?search=جبنة&lang=ar')
+        ->assertStatus(200);
+
+    expect($response->json('data'))->toHaveCount(1)
+        ->and($response->json('data.0.name'))->toBe('صوص جبنة');
+
+    $enResponse = $this->getJson('/api/user/addons?search=Cheese&lang=en')
+        ->assertStatus(200);
+
+    expect($enResponse->json('data'))->toHaveCount(1)
+        ->and($enResponse->json('data.0.name'))->toBe('Cheese Sauce');
+
+    $noMatchResponse = $this->getJson('/api/user/addons?search=NonExistentAddon')
+        ->assertStatus(200);
+
+    expect($noMatchResponse->json('data'))->toHaveCount(0);
+});
