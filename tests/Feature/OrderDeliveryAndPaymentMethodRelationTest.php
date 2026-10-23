@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\Shift;
+use App\Models\StartShift;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
@@ -574,4 +575,56 @@ test('cashier can settle payment for multiple delivery orders and updates paid, 
         ->and($freshB->cashier_id)->toBe($cashierDevice->id)
         ->and($freshB->cashier_man_id)->toBe($cashierMan->id)
         ->and($freshB->shift_id)->toBe($shift->id);
+});
+
+test('cashier can settle delivery payment with active open start_shift', function () {
+    $shift = Shift::create([
+        'name' => ['en' => 'Morning', 'ar' => 'Morning'],
+        'start_time' => '08:00:00',
+        'end_time' => '16:00:00',
+        'branch_id' => $this->branch->id,
+    ]);
+    $cashierDevice = Cashier::create(['name' => 'Device 3', 'branch_id' => $this->branch->id]);
+
+    $cashierMan = CashierMan::create([
+        'name' => 'Cashier Man Active Shift',
+        'user_name' => 'cashier_active_shift',
+        'password' => 'secret123',
+        'branch_id' => $this->branch->id,
+        'cashier_id' => $cashierDevice->id,
+        'shift_id' => $shift->id,
+    ]);
+    $cashierToken = JWTAuth::fromUser($cashierMan);
+
+    $openShift = StartShift::create([
+        'start' => now(),
+        'end' => null,
+        'branch_id' => $this->branch->id,
+        'cashier_id' => $cashierDevice->id,
+        'cashier_man_id' => $cashierMan->id,
+    ]);
+
+    $order = Order::create([
+        'module' => 'delivery',
+        'status' => 'delivered',
+        'branch_id' => $this->branch->id,
+        'delivery_id' => $this->delivery->id,
+        'financial_account_id' => $this->financialAccountCash->id,
+        'is_pos' => true,
+        'total' => 300,
+        'final_price' => 300,
+        'paid' => false,
+    ]);
+
+    $settleRes = $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+        ->postJson('/api/cashier/delivery-orders/settle-payment', [
+            'order_ids' => [$order->id],
+        ]);
+
+    $settleRes->assertStatus(200)
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('data.shift_id', $openShift->id);
+
+    expect($order->fresh()->paid)->toBeTrue()
+        ->and($order->fresh()->shift_id)->toBe($openShift->id);
 });

@@ -730,7 +730,7 @@ class CashierOrderController extends Controller
         $shiftId = StartShift::where('cashier_man_id', $cashierManId)
             ->whereNull('end')
             ->latest('start')
-            ->value('shift_id')
+            ->value('id')
             ?? $cashierUser?->shift_id;
 
         $ordersToUpdate = Order::whereIn('id', $orderIds)
