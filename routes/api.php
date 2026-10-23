@@ -26,8 +26,10 @@ use App\Http\Controllers\api\admin\ProductController;
 use App\Http\Controllers\api\admin\ProductManufactringController;
 use App\Http\Controllers\api\admin\ProductRecipeController;
 use App\Http\Controllers\api\admin\PurchaseController;
+use App\Http\Controllers\api\admin\PurchaseDueController;
 use App\Http\Controllers\api\admin\ReportController;
 use App\Http\Controllers\api\admin\SaleController;
+use App\Http\Controllers\api\admin\SaleDueController;
 use App\Http\Controllers\api\admin\SalerController;
 use App\Http\Controllers\api\admin\ShiftController;
 use App\Http\Controllers\api\admin\SupplierController;
@@ -163,6 +165,26 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('salers', SalerController::class);
     Route::apiResource('taxes', TaxController::class);
     Route::apiResource('wastes', WasteController::class);
+
+    // Purchase Dues (Installments)
+    Route::prefix('purchase-dues')->group(function () {
+        Route::get('overdue', [PurchaseDueController::class, 'overdue']);
+        Route::get('unpaid', [PurchaseDueController::class, 'unpaid']);
+        Route::get('paid', [PurchaseDueController::class, 'paid']);
+        Route::get('/', [PurchaseDueController::class, 'index']);
+        Route::get('{purchaseDue}', [PurchaseDueController::class, 'show']);
+        Route::post('{purchaseDue}/pay', [PurchaseDueController::class, 'pay']);
+    });
+
+    // Sale Dues (Installments)
+    Route::prefix('sale-dues')->group(function () {
+        Route::get('overdue', [SaleDueController::class, 'overdue']);
+        Route::get('unpaid', [SaleDueController::class, 'unpaid']);
+        Route::get('paid', [SaleDueController::class, 'paid']);
+        Route::get('/', [SaleDueController::class, 'index']);
+        Route::get('{saleDue}', [SaleDueController::class, 'show']);
+        Route::post('{saleDue}/pay', [SaleDueController::class, 'pay']);
+    });
 
     Route::get('manufacturing', [ManufactringController::class, 'index']);
     Route::post('manufacturing', [ManufactringController::class, 'manufacture']);
