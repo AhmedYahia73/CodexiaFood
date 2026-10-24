@@ -41,6 +41,8 @@ class OrderResource extends JsonResource
             'cashier_id' => $this->cashier_id,
             'cashier_man_id' => $this->cashier_man_id,
             'hall_table_id' => $this->hall_table_id,
+            'captain_order_id' => $this->captain_order_id,
+            'captain_order' => new CaptainOrderResource($this->whenLoaded('captainOrder')),
             'financial_account_id' => $this->financial_account_id,
             'financial_id' => $this->financial_account_id,
             'financial_account' => new FinancialAccountResource($this->whenLoaded('financialAccount')),

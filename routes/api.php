@@ -5,6 +5,7 @@ use App\Http\Controllers\api\admin\AdminController;
 use App\Http\Controllers\api\admin\BannerController;
 use App\Http\Controllers\api\admin\BranchController;
 use App\Http\Controllers\api\admin\BusinessSetupController;
+use App\Http\Controllers\api\admin\CaptainOrderController;
 use App\Http\Controllers\api\admin\CashierController;
 use App\Http\Controllers\api\admin\CashierManController;
 use App\Http\Controllers\api\admin\CategoryController;
@@ -92,6 +93,7 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('addons/lists', [AddonController::class, 'lists']);
     Route::get('addons/select-options', [AddonController::class, 'selectOptions']);
     Route::get('admins/select-options', [AdminController::class, 'selectOptions']);
+    Route::get('captain-orders/select-options', [CaptainOrderController::class, 'selectOptions']);
     Route::get('branches/select-options', [BranchController::class, 'selectOptions']);
     Route::get('cashier-men/select-options', [CashierManController::class, 'selectOptions']);
     Route::get('cashiers/select-options', [CashierController::class, 'selectOptions']);
@@ -144,6 +146,8 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('admins', AdminController::class);
     Route::apiResource('banners', BannerController::class)->except(['update']);
     Route::apiResource('branches', BranchController::class);
+    Route::match(['put', 'patch', 'post'], 'captain-orders/{captain_order}', [CaptainOrderController::class, 'update']);
+    Route::apiResource('captain-orders', CaptainOrderController::class);
     Route::apiResource('cashier-men', CashierManController::class);
     Route::apiResource('cashiers', CashierController::class);
     Route::apiResource('deliveries', DeliveryController::class);

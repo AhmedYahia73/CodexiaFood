@@ -419,6 +419,7 @@ class OrderController extends Controller
             'cashier_id' => 'nullable|exists:cashiers,id',
             'cashier_man_id' => 'nullable|exists:cashier_men,id',
             'hall_table_id' => 'nullable|exists:hall_tables,id',
+            'captain_order_id' => 'nullable|exists:captain_orders,id',
             'financial_account_id' => [
                 $isPos ? 'required_without:financial_id' : 'nullable',
                 'integer',
@@ -483,6 +484,7 @@ class OrderController extends Controller
                 'cashier_id' => $validated['cashier_id'] ?? null,
                 'cashier_man_id' => $validated['cashier_man_id'] ?? null,
                 'hall_table_id' => $validated['hall_table_id'] ?? null,
+                'captain_order_id' => $validated['captain_order_id'] ?? null,
                 'financial_account_id' => $financialAccountId,
                 'delivery_id' => $validated['delivery_id'] ?? null,
                 'payment_method_id' => $paymentMethodId,

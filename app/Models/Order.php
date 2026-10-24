@@ -16,6 +16,7 @@ class Order extends Model
         'cashier_id',
         'cashier_man_id',
         'hall_table_id',
+        'captain_order_id',
         'financial_account_id',
         'delivery_id',
         'payment_method_id',
@@ -151,6 +152,11 @@ class Order extends Model
     public function paymentMethod(): BelongsTo
     {
         return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function captainOrder(): BelongsTo
+    {
+        return $this->belongsTo(CaptainOrder::class, 'captain_order_id');
     }
 
     /**
