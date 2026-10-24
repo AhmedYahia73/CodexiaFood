@@ -848,7 +848,152 @@ sequenceDiagram
 
 ---
 
-## 9. ملخص أكواد الاستجابة الشائعة (HTTP Status Codes)
+## 9. واجهات إشعارات الطلبات وفحص الجديد (Notification Check-New APIs)
+
+واجهات مخصصة وسريعة للـ Polling والإشعارات الدورية:
+* **دورية الاستدعاء (Polling Interval):** يتم عمل **Fetch كل 20 ثانية** من قِبل التطبيق (`setInterval` أو background task).
+* **المدخلات:** يرسل التطبيق حقلاً واحداً فقط `count` (عدد الطلبات المحملة حالياً لديه).
+* **المخرجات:**
+  * `difference`: رقم الفارق العددي بين ما هو على السيرفر والعدد الذي أرسله التطبيق.
+  * `new_orders`:
+    * إذا كان `difference > 0`: مصفوفة تحتوي على الطلبات/الأطباق الجديدة الزائدة التي دخلت حديثاً لتحديث الشاشة وعرض التنبيهات فوراً.
+    * إذا كان `difference == 0`: تكون المصفوفة فارغة `[]`.
+
+---
+
+### 9.1 إشعار المطبخ بالطلبات الجديدة (GET / POST /api/kitchen/orders/check-new)
+يفحص طلبات المطبخ المعلقة ويجلب الطلبات الزائدة الجديدة في حال وجودها. يُستدعى كل 20 ثانية.
+
+* **المسار:** `GET` أو `POST /api/kitchen/orders/check-new`
+* **الـ Headers:** `Authorization: Bearer {kitchen_token}`
+* **الـ Request (Query في GET أو JSON Body في POST):**
+```json
+{
+  "count": 5
+}
+```
+
+* **الاستجابة في حال وجود طلبات جديدة (200 OK - difference > 0):**
+```json
+{
+  "status": true,
+  "difference": 1,
+  "new_orders": [
+    {
+      "id": 18,
+      "order_id": 105,
+      "order_cart_id": null,
+      "status": "pending",
+      "table": {
+        "id": 1,
+        "code": "T101",
+        "name": "طاولة 1"
+      },
+      "items": [
+        {
+          "id": 30,
+          "product_id": 10,
+          "product_name": "برجر دجاج كلاسيك",
+          "quantity": 2,
+          "price": 120.00,
+          "notes": "بدون مايونيز",
+          "details": [
+            {
+              "id": 1,
+              "option_names": ["كبير (Large)"],
+              "options": [
+                {
+                  "id": 4,
+                  "name": "كبير (Large)"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "created_at": "2026-10-24T23:50:00+03:00"
+    }
+  ]
+}
+```
+
+* **الاستجابة في حال عدم وجود جديد (200 OK - difference == 0):**
+```json
+{
+  "status": true,
+  "difference": 0,
+  "new_orders": []
+}
+```
+
+---
+
+### 9.2 إشعار كابتن الطلبات بالأطباق الجاهزة (GET / POST /api/captain/orders/check-new)
+يفحص الأطباق والطلبات التي انتهت في المطبخ (`status = 'done'`) وجاهزة للتقديم. يُستدعى كل 20 ثانية.
+
+* **المسار:** `GET` أو `POST /api/captain/orders/check-new`
+* **الـ Headers:** `Authorization: Bearer {captain_token}`
+* **الـ Request (Query في GET أو JSON Body في POST):**
+```json
+{
+  "count": 3
+}
+```
+
+* **الاستجابة في حال وجود أطباق جاهزة جديدة (200 OK - difference > 0):**
+```json
+{
+  "status": true,
+  "difference": 1,
+  "new_orders": [
+    {
+      "type": "order",
+      "id": 105,
+      "order_id": 105,
+      "table": {
+        "id": 1,
+        "code": "T101",
+        "name": "طاولة 1",
+        "hall_name": "الصالة الداخلية"
+      },
+      "items": [
+        {
+          "id": 140,
+          "product_name": "برجر دجاج كلاسيك",
+          "quantity": 2,
+          "note": "مستعجل",
+          "variations": [
+            {
+              "name": "الحجم",
+              "options": ["كبير (Large)"]
+            }
+          ],
+          "addons": [
+            {
+              "name": "جبنة إضافية",
+              "price": 15.00
+            }
+          ]
+        }
+      ],
+      "completed_at": "2026-10-24T23:55:00+03:00"
+    }
+  ]
+}
+```
+
+* **الاستجابة في حال عدم وجود جديد (200 OK - difference == 0):**
+```json
+{
+  "status": true,
+  "difference": 0,
+  "new_orders": []
+}
+```
+
+---
+
+## 10. ملخص أكواد الاستجابة الشائعة (HTTP Status Codes)
 
 | الرمز (Code) | الحالة | المعنى |
 |:---|:---|:---|

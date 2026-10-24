@@ -29,12 +29,26 @@ class KitchenOrderController extends Controller
             'items.product',
             'items.addon',
             'items.details',
+            'order.hallTable',
+            'orderCart.hallTable',
         ])
             ->where('kitchen_id', $kitchenId)
             ->latest('id')
             ->get();
 
-        // Collect all unique option IDs across all order items to load option names in one query
+        $data = $this->formatKitchenOrders($kitchenOrders, $lang);
+
+        return response()->json([
+            'status' => true,
+            'data' => $data,
+        ]);
+    }
+
+    /**
+     * Format a collection of KitchenOrder models into a standardized array.
+     */
+    private function formatKitchenOrders($kitchenOrders, string $lang): array
+    {
         $allOptionIds = [];
         foreach ($kitchenOrders as $ko) {
             foreach ($ko->items as $item) {
@@ -52,11 +66,18 @@ class KitchenOrderController extends Controller
             ? collect()
             : Option::whereIn('id', array_unique($allOptionIds))->get()->keyBy('id');
 
-        $data = $kitchenOrders->map(function (KitchenOrder $kitchenOrder) use ($lang, $optionsMap): array {
+        return $kitchenOrders->map(function (KitchenOrder $kitchenOrder) use ($lang, $optionsMap): array {
+            $table = $kitchenOrder->order?->hallTable ?? $kitchenOrder->orderCart?->hallTable;
+
             return [
                 'id' => $kitchenOrder->id,
                 'order_id' => $kitchenOrder->order_id,
                 'order_cart_id' => $kitchenOrder->order_cart_id,
+                'table' => $table ? [
+                    'id' => $table->id,
+                    'code' => $table->code,
+                    'name' => $table->name,
+                ] : null,
                 'items' => $kitchenOrder->items->map(function ($item) use ($lang, $optionsMap): array {
                     $productName = is_array($item->product?->name)
                         ? ($item->product->name[$lang] ?? $item->product->name['ar'] ?? $item->product->name['en'] ?? '')
@@ -106,12 +127,7 @@ class KitchenOrderController extends Controller
                     ];
                 })->values()->all(),
             ];
-        });
-
-        return response()->json([
-            'status' => true,
-            'data' => $data,
-        ]);
+        })->values()->all();
     }
 
     /**
@@ -387,6 +403,61 @@ class KitchenOrderController extends Controller
             'status' => true,
             'data' => $allDone,
             'count' => $allDone->count(),
+        ]);
+    }
+
+    /**
+     * Return orders difference and new orders for kitchen notifications.
+     */
+    public function checkNewOrders(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Current count of orders on the client side.
+             *
+             * @var int
+             *
+             * @example 5
+             */
+            'count' => 'required|integer|min:0',
+
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $kitchenId = auth('kitchen')->id() ?? auth()->id();
+        $lang = $validated['lang'] ?? 'ar';
+
+        $serverCount = KitchenOrder::where('kitchen_id', $kitchenId)->count();
+        $difference = max(0, $serverCount - (int) $validated['count']);
+
+        $newOrders = [];
+        if ($difference > 0) {
+            $newKitchenOrders = KitchenOrder::with([
+                'items.product',
+                'items.addon',
+                'items.details',
+                'order.hallTable',
+                'orderCart.hallTable',
+            ])
+                ->where('kitchen_id', $kitchenId)
+                ->latest('id')
+                ->take($difference)
+                ->get();
+
+            $newOrders = $this->formatKitchenOrders($newKitchenOrders, $lang);
+        }
+
+        return response()->json([
+            'status' => true,
+            'difference' => $difference,
+            'new_orders' => $newOrders,
         ]);
     }
 }

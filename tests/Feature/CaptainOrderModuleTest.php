@@ -464,3 +464,104 @@ test('unauthenticated access to protected captain routes is rejected', function 
     $this->postJson('/api/captain/cart', [])->assertStatus(401);
     $this->getJson('/api/captain/orders/done')->assertStatus(401);
 });
+
+test('kitchen check-new returns orders count difference for notifications', function () {
+    $kitchenToken = auth('kitchen')->login($this->kitchen);
+
+    $order1 = Order::create([
+        'shift_id' => $this->shift->id,
+        'cashier_id' => $this->cashier->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'hall_table_id' => $this->hallTable->id,
+        'module' => 'dinein',
+        'status' => 'preparing',
+        'total' => 50,
+        'final_price' => 50,
+    ]);
+    $order2 = Order::create([
+        'shift_id' => $this->shift->id,
+        'cashier_id' => $this->cashier->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'hall_table_id' => $this->hallTable->id,
+        'module' => 'dinein',
+        'status' => 'preparing',
+        'total' => 60,
+        'final_price' => 60,
+    ]);
+
+    // Create 2 pending kitchen orders
+    KitchenOrder::create(['kitchen_id' => $this->kitchen->id, 'order_id' => $order1->id]);
+    KitchenOrder::create(['kitchen_id' => $this->kitchen->id, 'order_id' => $order2->id]);
+
+    // 1. Client has 1 order loaded -> Difference should be 1 with 1 new order
+    $resPost = $this->withHeader('Authorization', 'Bearer '.$kitchenToken)
+        ->postJson('/api/kitchen/orders/check-new', ['count' => 1]);
+
+    $resPost->assertStatus(200)
+        ->assertJson([
+            'status' => true,
+            'difference' => 1,
+        ])
+        ->assertJsonCount(1, 'new_orders');
+
+    // 2. Client has 2 orders loaded via GET -> Difference should be 0 and empty new_orders
+    $resGet = $this->withHeader('Authorization', 'Bearer '.$kitchenToken)
+        ->getJson('/api/kitchen/orders/check-new?count=2');
+
+    $resGet->assertStatus(200)
+        ->assertExactJson([
+            'status' => true,
+            'difference' => 0,
+            'new_orders' => [],
+        ]);
+});
+
+test('captain check-new returns ready kitchen orders count difference for notifications', function () {
+    // Create 2 orders done in kitchen
+    Order::create([
+        'shift_id' => $this->shift->id,
+        'cashier_id' => $this->cashier->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'hall_table_id' => $this->hallTable->id,
+        'captain_order_id' => $this->captain->id,
+        'module' => 'dinein',
+        'status' => 'done',
+        'total' => 100,
+        'final_price' => 100,
+    ]);
+    Order::create([
+        'shift_id' => $this->shift->id,
+        'cashier_id' => $this->cashier->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'hall_table_id' => $this->hallTable->id,
+        'captain_order_id' => $this->captain->id,
+        'module' => 'dinein',
+        'status' => 'done',
+        'total' => 50,
+        'final_price' => 50,
+    ]);
+
+    $headers = ['Authorization' => 'Bearer '.$this->captainToken];
+
+    // 1. Captain app sends count = 0 -> difference is 2 with 2 new_orders
+    $resPost = $this->withHeaders($headers)
+        ->postJson('/api/captain/orders/check-new', ['count' => 0]);
+
+    $resPost->assertStatus(200)
+        ->assertJson([
+            'status' => true,
+            'difference' => 2,
+        ])
+        ->assertJsonCount(2, 'new_orders');
+
+    // 2. Captain app sends count = 2 via GET -> difference is 0 and empty new_orders
+    $resGet = $this->withHeaders($headers)
+        ->getJson('/api/captain/orders/check-new?count=2');
+
+    $resGet->assertStatus(200)
+        ->assertExactJson([
+            'status' => true,
+            'difference' => 0,
+            'new_orders' => [],
+        ]);
+});

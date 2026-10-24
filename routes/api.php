@@ -414,6 +414,7 @@ Route::prefix('user')->group(function () {
 Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->group(function () {
     Route::get('orders', [KitchenOrderController::class, 'index']);
     Route::get('orders/done', [KitchenOrderController::class, 'doneOrders']);
+    Route::match(['get', 'post'], 'orders/check-new', [KitchenOrderController::class, 'checkNewOrders']);
     Route::match(['put', 'post'], 'orders/{kitchenOrder}/done', [KitchenOrderController::class, 'markDone']);
 });
 
@@ -446,6 +447,8 @@ Route::prefix('captain')->group(function () {
         // Orders & Kitchen Finished Orders
         Route::get('orders/done', [CaptainRoleOrderController::class, 'doneOrders']);
         Route::get('kitchen-orders/done', [CaptainRoleOrderController::class, 'doneOrders']);
+        Route::match(['get', 'post'], 'orders/check-new', [CaptainRoleOrderController::class, 'checkNewOrders']);
+        Route::match(['get', 'post'], 'kitchen-orders/check-new', [CaptainRoleOrderController::class, 'checkNewOrders']);
         Route::apiResource('orders', CaptainRoleOrderController::class)->only(['index', 'show']);
     });
 });

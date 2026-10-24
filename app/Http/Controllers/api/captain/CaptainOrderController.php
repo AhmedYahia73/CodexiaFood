@@ -351,4 +351,138 @@ class CaptainOrderController extends Controller
             'data' => new OrderResource($order),
         ]);
     }
+
+    /**
+     * Return orders difference and new ready orders for captain notifications.
+     */
+    public function checkNewOrders(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Current count of orders on the client side.
+             *
+             * @var int
+             *
+             * @example 3
+             */
+            'count' => 'required|integer|min:0',
+
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $locale = $this->getLocale($request);
+
+        $ordersQuery = Order::with([
+            'hallTable.hall',
+            'orderProducts.product',
+            'orderProducts.variations.options.option',
+            'orderProducts.addons.addon',
+        ])
+            ->where('status', 'done')
+            ->latest('updated_at');
+
+        $cartsQuery = OrderCart::with([
+            'hallTable.hall',
+            'product',
+            'variationCarts.variation',
+            'addonCarts.addon',
+        ])
+            ->where('status', 'done')
+            ->latest('updated_at');
+
+        $serverCount = $ordersQuery->count() + $cartsQuery->count();
+        $difference = max(0, $serverCount - (int) $validated['count']);
+
+        $newOrders = [];
+        if ($difference > 0) {
+            $localize = function (mixed $value) use ($locale): ?string {
+                if (is_array($value)) {
+                    return $value[$locale] ?? $value['ar'] ?? $value['en'] ?? null;
+                }
+
+                return is_string($value) ? $value : null;
+            };
+
+            $doneOrders = $ordersQuery->take($difference)->get()->map(function (Order $order) use ($localize) {
+                return [
+                    'type' => 'order',
+                    'id' => $order->id,
+                    'order_id' => $order->id,
+                    'table' => $order->hallTable ? [
+                        'id' => $order->hallTable->id,
+                        'code' => $order->hallTable->code,
+                        'name' => $order->hallTable->name,
+                        'hall_name' => $localize($order->hallTable->hall?->name),
+                    ] : null,
+                    'items' => $order->orderProducts->map(function ($op) use ($localize) {
+                        return [
+                            'id' => $op->id,
+                            'product_name' => $localize($op->product?->name),
+                            'quantity' => $op->quantity,
+                            'note' => $op->note,
+                            'variations' => $op->variations->map(fn ($v) => [
+                                'name' => $localize($v->variation?->name),
+                                'options' => $v->options->map(fn ($o) => $localize($o->option?->name))->filter()->values(),
+                            ])->values(),
+                            'addons' => $op->addons->map(fn ($a) => [
+                                'name' => $localize($a->addon?->name),
+                                'price' => (float) $a->price,
+                            ])->values(),
+                        ];
+                    })->values(),
+                    'completed_at' => $order->updated_at?->toIso8601String(),
+                ];
+            });
+
+            $doneCarts = $cartsQuery->take($difference)->get()->map(function (OrderCart $cart) use ($localize) {
+                return [
+                    'type' => 'cart_item',
+                    'id' => $cart->id,
+                    'order_cart_id' => $cart->id,
+                    'table' => $cart->hallTable ? [
+                        'id' => $cart->hallTable->id,
+                        'code' => $cart->hallTable->code,
+                        'name' => $cart->hallTable->name,
+                        'hall_name' => $localize($cart->hallTable->hall?->name),
+                    ] : null,
+                    'items' => [
+                        [
+                            'id' => $cart->id,
+                            'product_name' => $localize($cart->product?->name),
+                            'quantity' => $cart->quantity,
+                            'note' => $cart->notes,
+                            'variations' => $cart->variationCarts->map(fn ($v) => [
+                                'name' => $localize($v->variation?->name),
+                                'options' => $v->getOptions()->map(fn ($o) => $localize($o->name))->filter()->values(),
+                            ])->values(),
+                            'addons' => $cart->addonCarts->map(fn ($a) => [
+                                'name' => $localize($a->addon?->name),
+                                'price' => (float) ($a->addon?->price ?? 0),
+                            ])->values(),
+                        ],
+                    ],
+                    'completed_at' => $cart->updated_at?->toIso8601String(),
+                ];
+            });
+
+            $newOrders = $doneOrders->concat($doneCarts)
+                ->sortByDesc('completed_at')
+                ->take($difference)
+                ->values()
+                ->all();
+        }
+
+        return response()->json([
+            'status' => true,
+            'difference' => $difference,
+            'new_orders' => $newOrders,
+        ]);
+    }
 }
