@@ -1,0 +1,518 @@
+<?php
+
+namespace App\Http\Controllers\api\captain;
+
+use App\Http\Controllers\Controller;
+use App\Models\HallTable;
+use App\Models\OrderAddonCart;
+use App\Models\OrderCart;
+use App\Models\OrderVariationCart;
+use App\Services\KitchenDispatchService;
+use App\Services\PriceCalculatorService;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * @tags Captain Table Cart
+ */
+class CaptainCartController extends Controller
+{
+    public function __construct(
+        protected PriceCalculatorService $priceCalculator
+    ) {}
+
+    private function getLocale(Request $request): string
+    {
+        $lang = $request->query('lang')
+            ?? $request->header('Accept-Language')
+            ?? $request->header('lang')
+            ?? app()->getLocale();
+
+        return str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
+    }
+
+    private function resolveHallTable(array $validated): ?HallTable
+    {
+        if (! empty($validated['table_code'])) {
+            return HallTable::with('branch')->where('code', $validated['table_code'])->first();
+        }
+
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+        if ($tableId) {
+            return HallTable::with('branch')->find((int) $tableId);
+        }
+
+        return null;
+    }
+
+    private function cartQuery(?int $tableId = null, ?int $captainOrderId = null): Builder
+    {
+        return OrderCart::with([
+            'hallTable.hall',
+            'product.discount',
+            'product.tax',
+            'variationCarts.variation',
+            'addonCarts.addon.discount',
+            'addonCarts.addon.tax',
+            'captainOrder',
+        ])
+            ->when($tableId, fn ($q) => $q->where('hall_table_id', $tableId))
+            ->when($captainOrderId, fn ($q) => $q->where('captain_order_id', $captainOrderId));
+    }
+
+    /**
+     * Get cart items for a given table or current captain, with calculation and grand totals.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Table unique code.
+             *
+             * @var string|null
+             *
+             * @example "T101"
+             */
+            'table_code' => 'sometimes|nullable|string|exists:hall_tables,code',
+
+            /**
+             * Table ID.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Table ID alias.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Only show cart items submitted by current authenticated captain.
+             *
+             * @var bool|null
+             *
+             * @example true
+             */
+            'my_items_only' => 'sometimes|nullable|boolean',
+
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $hallTable = $this->resolveHallTable($validated);
+        $captainId = auth('captain_order')->id();
+
+        $filterCaptainId = ! empty($validated['my_items_only']) ? $captainId : null;
+
+        if (! $hallTable && ! $captainId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد كود أو معرف الطاولة (table_code or table_id)',
+                'data' => [],
+                'grand_totals' => [
+                    'grand_total_price' => 0.00,
+                    'grand_total_discount' => 0.00,
+                    'grand_total_tax' => 0.00,
+                    'grand_final_price' => 0.00,
+                ],
+            ], 400);
+        }
+
+        $locale = $this->getLocale($request);
+
+        $carts = $this->cartQuery($hallTable?->id, $filterCaptainId)
+            ->where('module', 'dinein')
+            ->latest('id')
+            ->get();
+
+        $calculatedItems = $carts->map(
+            fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale)
+        )->all();
+
+        $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems);
+
+        return response()->json([
+            'status' => true,
+            'table_id' => $hallTable?->id,
+            'table_code' => $hallTable?->code,
+            'data' => $calculatedItems,
+            'grand_totals' => $grandTotals,
+        ]);
+    }
+
+    /**
+     * Add an item to table cart by captain and dispatch to kitchen.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Table unique code.
+             *
+             * @var string|null
+             *
+             * @example "T101"
+             */
+            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
+
+            /**
+             * Table ID.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Table ID alias.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Product ID to add to cart.
+             *
+             * @var int
+             *
+             * @example 1
+             */
+            'product_id' => 'required|exists:products,id',
+
+            /**
+             * Quantity.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'quantity' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Item preparation notes.
+             *
+             * @var string|null
+             *
+             * @example "Extra crispy"
+             */
+            'notes' => 'sometimes|nullable|string',
+
+            /**
+             * Variations array.
+             *
+             * @var array|null
+             */
+            'variations' => 'sometimes|nullable|array',
+            'variations.*.variation_id' => 'required_with:variations|exists:variations,id',
+            'variations.*.option_ids' => 'required_with:variations|array',
+            'variations.*.option_ids.*' => 'exists:options,id',
+
+            /**
+             * Addons array.
+             *
+             * @var array|null
+             */
+            'addons' => 'sometimes|nullable|array',
+            'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
+
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $hallTable = $this->resolveHallTable($validated);
+        if (! $hallTable) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد كود أو معرف الطاولة (table_code or table_id)',
+            ], 400);
+        }
+
+        $captainId = auth('captain_order')->id();
+        $locale = $this->getLocale($request);
+
+        $cart = DB::transaction(function () use ($validated, $hallTable, $captainId): OrderCart {
+            $cart = OrderCart::create([
+                'module' => 'dinein',
+                'product_id' => $validated['product_id'],
+                'hall_table_id' => $hallTable->id,
+                'captain_order_id' => $captainId,
+                'branch_id' => $hallTable->branch_id,
+                'cashier_id' => null,
+                'cashier_man_id' => null,
+                'quantity' => $validated['quantity'] ?? 1,
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            foreach ($validated['variations'] ?? [] as $varData) {
+                OrderVariationCart::create([
+                    'order_cart_id' => $cart->id,
+                    'variation_id' => $varData['variation_id'],
+                    'option_ids' => $varData['option_ids'],
+                ]);
+            }
+
+            foreach ($validated['addons'] ?? [] as $addonData) {
+                OrderAddonCart::create([
+                    'order_cart_id' => $cart->id,
+                    'addon_id' => $addonData['addon_id'],
+                ]);
+            }
+
+            return $cart;
+        });
+
+        $cart->load([
+            'hallTable',
+            'product.discount',
+            'product.tax',
+            'variationCarts.variation',
+            'addonCarts.addon.discount',
+            'addonCarts.addon.tax',
+            'captainOrder',
+        ]);
+
+        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+        $calculated['table_code'] = $hallTable->code;
+
+        // Dispatch dinein cart item to kitchen for preparation
+        app(KitchenDispatchService::class)->dispatchFromCart($cart);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تمت إضافة المنتج إلى السلة وإرساله للمطبخ بنجاح',
+            'table_code' => $hallTable->code,
+            'data' => $calculated,
+        ], 201);
+    }
+
+    /**
+     * Show single cart item with calculations.
+     */
+    public function show(Request $request, OrderCart $cart): JsonResponse
+    {
+        $request->validate([
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $locale = $this->getLocale($request);
+
+        $cart->load([
+            'hallTable',
+            'product.discount',
+            'product.tax',
+            'variationCarts.variation',
+            'addonCarts.addon.discount',
+            'addonCarts.addon.tax',
+            'captainOrder',
+        ]);
+
+        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+
+        return response()->json([
+            'status' => true,
+            'data' => $calculated,
+        ]);
+    }
+
+    /**
+     * Update cart item quantity, notes, variations, or addons.
+     */
+    public function update(Request $request, OrderCart $cart): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Updated quantity.
+             *
+             * @var int|null
+             *
+             * @example 2
+             */
+            'quantity' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Updated notes.
+             *
+             * @var string|null
+             *
+             * @example "No onions"
+             */
+            'notes' => 'sometimes|nullable|string',
+
+            /**
+             * Variations array.
+             *
+             * @var array|null
+             */
+            'variations' => 'sometimes|nullable|array',
+            'variations.*.variation_id' => 'required_with:variations|exists:variations,id',
+            'variations.*.option_ids' => 'required_with:variations|array',
+            'variations.*.option_ids.*' => 'exists:options,id',
+
+            /**
+             * Addons array.
+             *
+             * @var array|null
+             */
+            'addons' => 'sometimes|nullable|array',
+            'addons.*.addon_id' => 'required_with:addons|exists:addons,id',
+
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $locale = $this->getLocale($request);
+
+        DB::transaction(function () use ($validated, $cart): void {
+            $updateData = [];
+            if (isset($validated['quantity'])) {
+                $updateData['quantity'] = $validated['quantity'];
+            }
+            if (array_key_exists('notes', $validated)) {
+                $updateData['notes'] = $validated['notes'];
+            }
+
+            if (! empty($updateData)) {
+                $cart->update($updateData);
+            }
+
+            if (array_key_exists('variations', $validated)) {
+                $cart->variationCarts()->delete();
+                foreach ($validated['variations'] ?? [] as $varData) {
+                    OrderVariationCart::create([
+                        'order_cart_id' => $cart->id,
+                        'variation_id' => $varData['variation_id'],
+                        'option_ids' => $varData['option_ids'],
+                    ]);
+                }
+            }
+
+            if (array_key_exists('addons', $validated)) {
+                $cart->addonCarts()->delete();
+                foreach ($validated['addons'] ?? [] as $addonData) {
+                    OrderAddonCart::create([
+                        'order_cart_id' => $cart->id,
+                        'addon_id' => $addonData['addon_id'],
+                    ]);
+                }
+            }
+        });
+
+        $cart->load([
+            'hallTable',
+            'product.discount',
+            'product.tax',
+            'variationCarts.variation',
+            'addonCarts.addon.discount',
+            'addonCarts.addon.tax',
+            'captainOrder',
+        ]);
+
+        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم تحديث عنصر السلة بنجاح',
+            'data' => $calculated,
+        ]);
+    }
+
+    /**
+     * Delete cart item.
+     */
+    public function destroy(OrderCart $cart): JsonResponse
+    {
+        $cart->delete();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم حذف العنصر من السلة بنجاح',
+        ]);
+    }
+
+    /**
+     * Clear all cart items for a given table.
+     */
+    public function clear(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Table unique code.
+             *
+             * @var string|null
+             *
+             * @example "T101"
+             */
+            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
+
+            /**
+             * Table ID.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Table ID alias.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+        ]);
+
+        $hallTable = $this->resolveHallTable($validated);
+        if (! $hallTable) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد كود أو معرف الطاولة (table_code or table_id)',
+            ], 400);
+        }
+
+        OrderCart::where('hall_table_id', $hallTable->id)->delete();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم تفريغ سلة الطاولة بنجاح',
+        ]);
+    }
+}

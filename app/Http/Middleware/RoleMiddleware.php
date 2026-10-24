@@ -18,7 +18,7 @@ class RoleMiddleware
     {
         $user = null;
 
-        $guards = ['admin', 'cashier_man', 'branch', 'kitchen', 'api', 'web'];
+        $guards = ['admin', 'cashier_man', 'branch', 'kitchen', 'captain_order', 'api', 'web'];
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
                 $user = Auth::guard($guard)->user();

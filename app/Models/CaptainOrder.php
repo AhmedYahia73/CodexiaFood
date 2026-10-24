@@ -28,7 +28,13 @@ class CaptainOrder extends Authenticatable implements JWTSubject
 
     protected $appends = [
         'images_urls',
+        'role',
     ];
+
+    public function getRoleAttribute(): string
+    {
+        return 'captain_order';
+    }
 
     protected function casts(): array
     {
@@ -73,5 +79,10 @@ class CaptainOrder extends Authenticatable implements JWTSubject
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class, 'captain_order_id');
+    }
+
+    public function carts(): HasMany
+    {
+        return $this->hasMany(OrderCart::class, 'captain_order_id');
     }
 }

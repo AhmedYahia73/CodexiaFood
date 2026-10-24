@@ -21,6 +21,7 @@ class OrderCart extends Model
         'cashier_man_id',
         'branch_id',
         'hall_table_id',
+        'captain_order_id',
         'uu_id',
         'quantity',
         'notes',
@@ -81,6 +82,11 @@ class OrderCart extends Model
     public function hallTable(): BelongsTo
     {
         return $this->belongsTo(HallTable::class);
+    }
+
+    public function captainOrder(): BelongsTo
+    {
+        return $this->belongsTo(CaptainOrder::class, 'captain_order_id');
     }
 
     public function kitchenOrders(): HasMany

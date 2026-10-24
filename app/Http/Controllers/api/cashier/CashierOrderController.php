@@ -333,6 +333,15 @@ class CashierOrderController extends Controller
              * @example true
              */
             'paid' => 'sometimes|nullable|boolean',
+
+            /**
+             * Captain Order ID if assigned to a waiter/captain.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'captain_order_id' => 'sometimes|nullable|integer|exists:captain_orders,id',
         ]);
 
         $financialAccountId = $validated['financial_account_id'] ?? $validated['financial_id'] ?? null;
@@ -386,8 +395,13 @@ class CashierOrderController extends Controller
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
         ])
-            ->where('cashier_id', $cashierId)
-            ->where('module', $validated['module']);
+            ->where('module', $validated['module'])
+            ->where(function ($query) use ($cashierId, $validated) {
+                $query->where('cashier_id', $cashierId);
+                if ($validated['module'] === 'dinein') {
+                    $query->orWhereNull('cashier_id');
+                }
+            });
 
         if ($validated['module'] === 'dinein') {
             if (! $tableId) {
@@ -407,6 +421,9 @@ class CashierOrderController extends Controller
                 'message' => 'السلة فارغة لهذا القسم',
             ], 400);
         }
+
+        $captainOrderId = $validated['captain_order_id']
+            ?? $carts->firstWhere('captain_order_id', '!=', null)?->captain_order_id;
 
         // Calculate item totals and grand totals using PriceCalculatorService
         $calculatedItems = $carts->map(
@@ -439,12 +456,13 @@ class CashierOrderController extends Controller
             ? (bool) $validated['paid']
             : (! ($isCash && $isDelivery));
 
-        $order = DB::transaction(function () use ($validated, $tableId, $financialAccountId, $paymentMethodId, $paid, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
+        $order = DB::transaction(function () use ($validated, $tableId, $captainOrderId, $financialAccountId, $paymentMethodId, $paid, $carts, $grandTotals, $cashierId, $openShiftId, $branchId): Order {
             $order = Order::create([
                 'shift_id' => $openShiftId,
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
                 'hall_table_id' => $tableId,
+                'captain_order_id' => $captainOrderId,
                 'financial_account_id' => $financialAccountId,
                 'delivery_id' => $validated['delivery_id'] ?? null,
                 'payment_method_id' => $paymentMethodId,

@@ -80,6 +80,7 @@ class TableOrderCartController extends Controller
             'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
             'table_id' => 'required_without_all:table_code,hall_table_id|nullable|integer|exists:hall_tables,id',
             'hall_table_id' => 'required_without_all:table_code,table_id|nullable|integer|exists:hall_tables,id',
+            'captain_order_id' => 'sometimes|nullable|integer|exists:captain_orders,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
             'latitude' => 'nullable|numeric',
@@ -109,7 +110,12 @@ class TableOrderCartController extends Controller
 
         $locale = $this->getLocale($request);
 
-        $carts = $this->cartQuery($hallTable->id)->latest('id')->get();
+        $cartsQuery = $this->cartQuery($hallTable->id);
+        if (! empty($validated['captain_order_id'])) {
+            $cartsQuery->where('captain_order_id', $validated['captain_order_id']);
+        }
+
+        $carts = $cartsQuery->latest('id')->get();
 
         $calculatedItems = $carts->map(
             fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale)
@@ -134,6 +140,7 @@ class TableOrderCartController extends Controller
             'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
             'table_id' => 'required_without_all:table_code,hall_table_id|nullable|exists:hall_tables,id',
             'hall_table_id' => 'nullable|exists:hall_tables,id',
+            'captain_order_id' => 'sometimes|nullable|integer|exists:captain_orders,id',
             'product_id' => 'required|exists:products,id',
             'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
@@ -170,6 +177,7 @@ class TableOrderCartController extends Controller
                 'module' => 'dinein',
                 'product_id' => $validated['product_id'],
                 'hall_table_id' => $hallTable->id,
+                'captain_order_id' => $validated['captain_order_id'] ?? auth('captain_order')->id() ?? null,
                 'branch_id' => $hallTable->branch_id,
                 'cashier_id' => null,
                 'cashier_man_id' => null,
@@ -268,6 +276,7 @@ class TableOrderCartController extends Controller
         }
 
         $validated = $request->validate([
+            'captain_order_id' => 'sometimes|nullable|integer|exists:captain_orders,id',
             'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
             'variations' => 'nullable|array',
@@ -293,6 +302,9 @@ class TableOrderCartController extends Controller
             }
             if (array_key_exists('notes', $validated)) {
                 $updateData['notes'] = $validated['notes'];
+            }
+            if (array_key_exists('captain_order_id', $validated)) {
+                $updateData['captain_order_id'] = $validated['captain_order_id'];
             }
 
             if (! empty($updateData)) {

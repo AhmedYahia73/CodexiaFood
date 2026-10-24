@@ -2,6 +2,7 @@
 
 use App\Models\Admin;
 use App\Models\Branch;
+use App\Models\CaptainOrder;
 use App\Models\CashierMan;
 use App\Models\Kitchen;
 use App\Models\User;
@@ -66,6 +67,10 @@ return [
             'driver' => 'jwt',
             'provider' => 'kitchens',
         ],
+        'captain_order' => [
+            'driver' => 'jwt',
+            'provider' => 'captain_orders',
+        ],
     ],
 
     /*
@@ -105,6 +110,10 @@ return [
         'kitchens' => [
             'driver' => 'eloquent',
             'model' => Kitchen::class,
+        ],
+        'captain_orders' => [
+            'driver' => 'eloquent',
+            'model' => CaptainOrder::class,
         ],
     ],
 

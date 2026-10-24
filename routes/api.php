@@ -56,6 +56,10 @@ use App\Http\Controllers\api\branch\PurchaseController as BranchPurchaseControll
 use App\Http\Controllers\api\branch\ReportController as BranchReportController;
 use App\Http\Controllers\api\branch\ShiftController as BranchShiftController;
 use App\Http\Controllers\api\branch\WasteController as BranchWasteController;
+use App\Http\Controllers\api\captain\CaptainAuthController;
+use App\Http\Controllers\api\captain\CaptainCartController;
+use App\Http\Controllers\api\captain\CaptainHomeController;
+use App\Http\Controllers\api\captain\CaptainOrderController as CaptainRoleOrderController;
 use App\Http\Controllers\api\cashier\CashierCartController;
 use App\Http\Controllers\api\cashier\CashierExpenseController;
 use App\Http\Controllers\api\cashier\CashierHomeController;
@@ -76,7 +80,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
 
-    Route::middleware(['auth:admin,cashier_man,branch,kitchen'])->group(function () {
+    Route::middleware(['auth:admin,cashier_man,branch,kitchen,captain_order'])->group(function () {
         Route::get('me', [AuthController::class, 'me']);
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('refresh', [AuthController::class, 'refresh']);
@@ -409,5 +413,39 @@ Route::prefix('user')->group(function () {
 */
 Route::middleware(['auth:kitchen', 'role:kitchen'])->prefix('kitchen')->group(function () {
     Route::get('orders', [KitchenOrderController::class, 'index']);
+    Route::get('orders/done', [KitchenOrderController::class, 'doneOrders']);
     Route::match(['put', 'post'], 'orders/{kitchenOrder}/done', [KitchenOrderController::class, 'markDone']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Captain Order Protected Routes (role = captain_order)
+|--------------------------------------------------------------------------
+*/
+Route::prefix('captain')->group(function () {
+    Route::post('login', [CaptainAuthController::class, 'login']);
+
+    Route::middleware(['auth:captain_order', 'role:captain_order'])->group(function () {
+        Route::get('me', [CaptainAuthController::class, 'me']);
+        Route::post('logout', [CaptainAuthController::class, 'logout']);
+        Route::post('refresh', [CaptainAuthController::class, 'refresh']);
+
+        // Home & Menu
+        Route::get('categories/parents', [CaptainHomeController::class, 'parentCategories']);
+        Route::get('categories/sub', [CaptainHomeController::class, 'subCategories']);
+        Route::get('products', [CaptainHomeController::class, 'products']);
+        Route::get('products/{product}', [CaptainHomeController::class, 'productDetails']);
+        Route::get('addons', [CaptainHomeController::class, 'addons']);
+        Route::get('halls', [CaptainHomeController::class, 'halls']);
+        Route::get('table/{hallTable}', [CaptainHomeController::class, 'tableInfo']);
+
+        // Cart
+        Route::delete('cart/clear', [CaptainCartController::class, 'clear']);
+        Route::apiResource('cart', CaptainCartController::class);
+
+        // Orders & Kitchen Finished Orders
+        Route::get('orders/done', [CaptainRoleOrderController::class, 'doneOrders']);
+        Route::get('kitchen-orders/done', [CaptainRoleOrderController::class, 'doneOrders']);
+        Route::apiResource('orders', CaptainRoleOrderController::class)->only(['index', 'show']);
+    });
 });

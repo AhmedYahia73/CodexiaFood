@@ -23,7 +23,7 @@ class AuthController extends Controller
         $request->validate([
             'name' => 'required|string',
             'password' => 'required|string',
-            'guard' => 'nullable|string|in:admin,cashier_man,branch,kitchen',
+            'guard' => 'nullable|string|in:admin,cashier_man,branch,kitchen,captain_order',
         ]);
 
         $credentials = [];
@@ -33,13 +33,13 @@ class AuthController extends Controller
 
         $targetGuards = $request->filled('guard')
             ? [$request->guard]
-            : ['admin', 'cashier_man', 'branch', 'kitchen'];
+            : ['admin', 'cashier_man', 'branch', 'kitchen', 'captain_order'];
 
         $token = null;
         $activeGuard = null;
 
         foreach ($targetGuards as $guard) {
-            if ($guard === 'branch' || $guard === 'kitchen') {
+            if ($guard === 'branch' || $guard === 'kitchen' || $guard === 'captain_order') {
                 if ($token = Auth::guard($guard)->attempt(['user_name' => $request->name, 'password' => $request->password])) {
                     $activeGuard = $guard;
                     break;
@@ -144,7 +144,7 @@ class AuthController extends Controller
 
     protected function getActiveGuard(): ?string
     {
-        $guards = ['admin', 'cashier_man', 'branch', 'kitchen', 'api', 'web'];
+        $guards = ['admin', 'cashier_man', 'branch', 'kitchen', 'captain_order', 'api', 'web'];
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
                 return $guard;

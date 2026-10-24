@@ -268,6 +268,8 @@ class PriceCalculatorService
             'module' => $cart->module,
             'hall_table_id' => $cart->hall_table_id,
             'table_id' => $cart->hall_table_id,
+            'captain_order_id' => $cart->captain_order_id,
+            'status' => $cart->status,
             'quantity' => $qty,
             'notes' => $cart->notes,
             'is_gift' => $isGift,
