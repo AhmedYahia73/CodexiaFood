@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\QrCodeService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -35,7 +36,7 @@ class OrderResource extends JsonResource
         }
 
         return [
-            'id' => $this->id,
+            'id' => $this->id, 
             'shift_id' => $this->shift_id,
             'shift_name' => $localizedShiftName,
             'cashier_id' => $this->cashier_id,

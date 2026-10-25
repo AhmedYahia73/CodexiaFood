@@ -19,6 +19,7 @@ use App\Models\ProductRecipeStock;
 use App\Models\StartShift;
 use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
+use App\Services\QrCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +31,7 @@ class CashierOrderController extends Controller
     public function __construct(
         protected PriceCalculatorService $priceCalculator,
         protected KitchenDispatchService $kitchenDispatch,
+        protected QrCodeService $qrCodeService,
     ) {}
 
     /**
@@ -598,9 +600,14 @@ class CashierOrderController extends Controller
             $this->kitchenDispatch->dispatchFromOrder($order);
         }
 
+        $qrBase64 = $this->qrCodeService->generateOrderQrBase64($order);
+        $qrUrl = url("api/orders/{$order->code}/qr");
+        $trackingUrl = $this->qrCodeService->getOrderTrackingUrl($order);
+
         return response()->json([
             'status' => true,
-            'message' => 'تم إنشاء الطلب بنجاح من السلة',
+            'message' => 'تم إنشاء الطلب بنجاح من السلة', 
+            'qr_base64' => $qrBase64, 
             'data' => new OrderResource($order),
         ], 201);
     }

@@ -408,6 +408,15 @@ Route::prefix('user')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
+| Public Order Tracking & Details Routes (No Auth)
+|--------------------------------------------------------------------------
+*/
+Route::get('orders/{code}', [UserOrderController::class, 'showByCode'])->name('orders.public.show');
+Route::get('orders/{code}/qr', [UserOrderController::class, 'qr'])->name('orders.public.qr');
+ 
+
+/*
+|--------------------------------------------------------------------------
 | Kitchen Protected Routes (role = kitchen)
 |--------------------------------------------------------------------------
 */

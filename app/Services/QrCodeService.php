@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\BusinessSetup;
 use App\Models\HallTable;
+use App\Models\Order;
 use Illuminate\Support\Facades\Storage;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
@@ -35,5 +37,47 @@ class QrCodeService
         if ($table->qr && Storage::disk('public')->exists($table->qr)) {
             Storage::disk('public')->delete($table->qr);
         }
+    }
+
+    /**
+     * Build customer order tracking URL for an order.
+     */
+    public function getOrderTrackingUrl(Order|string $order): string
+    {
+        $code = $order instanceof Order ? $order->code : $order;
+        $businessSetup = BusinessSetup::first();
+        $baseUrl = $businessSetup?->table_order_url;
+
+        if (empty($baseUrl)) {
+            $baseUrl = config('app.url');
+        }
+
+        $baseUrl = rtrim($baseUrl, '/');
+
+        if (str_ends_with($baseUrl, '/my_order')) {
+            return "{$baseUrl}/{$code}";
+        }
+
+        return "{$baseUrl}/my_order/{$code}";
+    }
+
+    /**
+     * Generate SVG string for order QR code without saving to server.
+     */
+    public function generateOrderQrSvg(Order|string $order, int $size = 250): string
+    {
+        $targetUrl = $this->getOrderTrackingUrl($order);
+
+        return (string) QrCode::size($size)->generate($targetUrl);
+    }
+
+    /**
+     * Generate base64 data URI for order QR code without saving to server.
+     */
+    public function generateOrderQrBase64(Order|string $order, int $size = 250): string
+    {
+        $svg = $this->generateOrderQrSvg($order, $size);
+
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 }

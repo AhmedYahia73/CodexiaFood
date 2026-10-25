@@ -6,12 +6,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Order extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'code',
         'shift_id',
         'cashier_id',
         'cashier_man_id',
@@ -55,6 +57,10 @@ class Order extends Model
     protected static function booted(): void
     {
         static::creating(function (Order $order) {
+            if (empty($order->code)) {
+                $order->code = (string) Str::uuid();
+            }
+
             if (! array_key_exists('paid', $order->attributes) || $order->attributes['paid'] === null) {
                 $order->paid = $order->determinePaidStatus();
             }
@@ -192,6 +198,28 @@ class Order extends Model
     public function setFinancialIdAttribute(mixed $value): void
     {
         $this->attributes['financial_account_id'] = $value ? (int) $value : null;
+    }
+
+    /**
+     * Retrieve the model for a bound value by id or UUID code.
+     *
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return Model|null
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field) {
+            return parent::resolveRouteBinding($value, $field);
+        }
+
+        return $this->where(function ($query) use ($value) {
+            if (is_numeric($value)) {
+                $query->where('id', $value)->orWhere('code', $value);
+            } else {
+                $query->where('code', $value);
+            }
+        })->first();
     }
 
     public function orderProducts(): HasMany

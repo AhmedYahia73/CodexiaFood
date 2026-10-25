@@ -19,9 +19,11 @@ use App\Models\ProductRecipeStock;
 use App\Services\GeofenceService;
 use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
+use App\Services\QrCodeService;
 use App\Services\RestaurantWorkingHoursService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -558,6 +560,85 @@ class UserOrderController extends Controller
         return response()->json([
             'status' => true,
             'data' => new OrderResource($order),
+        ]);
+    }
+
+    /**
+     * Get order details by order code without authentication.
+     */
+    public function showByCode(Request $request, string $code): JsonResponse
+    {
+        $validated = $request->validate([
+            /**
+             * Language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $order = Order::where(function ($query) use ($code) {
+            if (is_numeric($code)) {
+                $query->where('id', $code)->orWhere('code', $code);
+            } else {
+                $query->where('code', $code);
+            }
+        })->with([
+            'shift',
+            'cashier',
+            'cashierMan',
+            'hallTable',
+            'financialAccount',
+            'delivery',
+            'paymentMethod',
+            'branch',
+            'captainOrder',
+            'orderProducts.product',
+            'orderProducts.variations.variation',
+            'orderProducts.variations.options.option',
+            'orderProducts.addons.addon',
+        ])->first();
+
+        if (! $order) {
+            return response()->json([
+                'status' => false,
+                'message' => 'الطلب غير موجود',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => new OrderResource($order),
+        ]);
+    }
+
+    /**
+     * Stream dynamically generated QR code SVG image for an order without saving to disk.
+     */
+    public function qr(Request $request, string $code): Response|JsonResponse
+    {
+        $order = Order::where(function ($query) use ($code) {
+            if (is_numeric($code)) {
+                $query->where('id', $code)->orWhere('code', $code);
+            } else {
+                $query->where('code', $code);
+            }
+        })->first();
+
+        if (! $order) {
+            return response()->json([
+                'status' => false,
+                'message' => 'الطلب غير موجود',
+            ], 404);
+        }
+
+        $svg = app(QrCodeService::class)->generateOrderQrSvg($order);
+
+        return response($svg, 200, [
+            'Content-Type' => 'image/svg+xml',
+            'Cache-Control' => 'public, max-age=86400',
         ]);
     }
 }
