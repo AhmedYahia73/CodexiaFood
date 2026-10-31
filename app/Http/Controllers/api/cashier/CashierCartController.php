@@ -43,11 +43,17 @@ class CashierCartController extends Controller
             'variationCarts.variation',
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
-        ])->where(function ($query) use ($cashierId) {
-            $query->where('cashier_id', $cashierId)
+        ])->where(function ($query) use ($cashierId, $tableId) {
+            // شرط الكاشير: الكاشير المحدد أو غير محدد
+            $query->where(function ($q) use ($cashierId) {
+                $q->where('cashier_id', $cashierId)
                 ->orWhereNull('cashier_id');
-        })->when($tableId, function ($query) use ($tableId) {
-            $query->where('hall_table_id', $tableId);
+            });
+
+            // إضافة شرط الطاولة باستخدام OR إذا كانت القيمة موجودة
+            if ($tableId) {
+                $query->orWhere('hall_table_id', $tableId);
+            }
         });
     }
 
