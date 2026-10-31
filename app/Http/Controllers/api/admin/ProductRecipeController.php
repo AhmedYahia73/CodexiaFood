@@ -7,6 +7,7 @@ use App\Http\Resources\ProductRecipeResource;
 use App\Models\Branch;
 use App\Models\Category;
 use App\Models\ProductRecipe;
+use App\Models\Unit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -154,6 +155,7 @@ class ProductRecipeController extends Controller
         return [
             'branches' => Branch::select('id', 'name')->get(),
             'categories' => $query->select('id', 'name', 'type')->get(),
+            'units' => Unit::select('id', 'name', 'value')->get(),
         ];
     }
 

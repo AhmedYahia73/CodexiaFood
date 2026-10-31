@@ -15,12 +15,14 @@ class ManufacturingRecipe extends Model
         'product_recipe_id',
         'count',
         'manufacturing_list_id',
+        'unit_id',
     ];
 
     protected function casts(): array
     {
         return [
             'count' => 'integer',
+            'unit_id' => 'integer',
         ];
     }
 
@@ -37,5 +39,10 @@ class ManufacturingRecipe extends Model
     public function manufacturingList(): BelongsTo
     {
         return $this->belongsTo(ManufacturingList::class);
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class);
     }
 }

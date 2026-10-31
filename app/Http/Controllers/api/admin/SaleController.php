@@ -13,6 +13,8 @@ use App\Models\ProductRecipe;
 use App\Models\ProductRecipeStock;
 use App\Models\Sale;
 use App\Models\Saler;
+use App\Models\Unit;
+use App\Services\UnitConversionService;
 use App\trait\image;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -145,45 +147,51 @@ class SaleController extends Controller
                             }
 
                             if (! empty($recipeItem->material_id)) {
-                                $currentStock = (float) (MaterialStock::where('material_id', $recipeItem->material_id)
+                                $matStock = MaterialStock::where('material_id', $recipeItem->material_id)
                                     ->where('branch_id', $branchId)
-                                    ->value('stock') ?? 0);
+                                    ->first();
 
-                                if ($currentStock < $requiredQty) {
+                                $currentStock = (float) ($matStock?->stock ?? 0);
+                                $requiredQtyInStockUnit = UnitConversionService::convert($requiredQty, $recipeItem->unit_id, $matStock?->unit_id);
+
+                                if ($currentStock < $requiredQtyInStockUnit) {
                                     $name = $recipeItem->material?->name;
                                     $label = is_array($name) ? ($name['ar'] ?? $name['en'] ?? "مادة خام #{$recipeItem->material_id}") : ($name ?? "مادة خام #{$recipeItem->material_id}");
 
                                     return response()->json([
                                         'status' => false,
-                                        'message' => "المخزون المتوفر للمادة الخام ({$label}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQty}.",
+                                        'message' => "المخزون المتوفر للمادة الخام ({$label}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQtyInStockUnit}.",
                                         'insufficient_ingredient' => [
                                             'type' => 'material',
                                             'id' => $recipeItem->material_id,
                                             'name' => $label,
                                             'available_stock' => $currentStock,
-                                            'required_quantity' => $requiredQty,
+                                            'required_quantity' => $requiredQtyInStockUnit,
                                             'can_bypass' => true,
                                         ],
                                     ], 422);
                                 }
                             } elseif (! empty($recipeItem->product_recipe_id)) {
-                                $currentStock = (float) (ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
+                                $recStock = ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
                                     ->where('branch_id', $branchId)
-                                    ->value('stock') ?? 0);
+                                    ->first();
 
-                                if ($currentStock < $requiredQty) {
+                                $currentStock = (float) ($recStock?->stock ?? 0);
+                                $requiredQtyInStockUnit = UnitConversionService::convert($requiredQty, $recipeItem->unit_id, $recStock?->unit_id);
+
+                                if ($currentStock < $requiredQtyInStockUnit) {
                                     $name = $recipeItem->productRecipe?->name;
                                     $label = is_array($name) ? ($name['ar'] ?? $name['en'] ?? "وصفة #{$recipeItem->product_recipe_id}") : ($name ?? "وصفة #{$recipeItem->product_recipe_id}");
 
                                     return response()->json([
                                         'status' => false,
-                                        'message' => "المخزون المتوفر للوصفة ({$label}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQty}.",
+                                        'message' => "المخزون المتوفر للوصفة ({$label}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQtyInStockUnit}.",
                                         'insufficient_ingredient' => [
                                             'type' => 'recipe',
                                             'id' => $recipeItem->product_recipe_id,
                                             'name' => $label,
                                             'available_stock' => $currentStock,
-                                            'required_quantity' => $requiredQty,
+                                            'required_quantity' => $requiredQtyInStockUnit,
                                             'can_bypass' => true,
                                         ],
                                     ], 422);
@@ -327,10 +335,11 @@ class SaleController extends Controller
                                     ->first();
 
                                 if ($matStock) {
+                                    $requiredQtyInStockUnit = UnitConversionService::convert($requiredQty, $recipeItem->unit_id, $matStock->unit_id);
                                     $current = (float) $matStock->stock;
                                     $deduct = $withoutRecipe
-                                        ? min(max(0.0, $current), $requiredQty)
-                                        : $requiredQty;
+                                        ? min(max(0.0, $current), $requiredQtyInStockUnit)
+                                        : $requiredQtyInStockUnit;
 
                                     if ($deduct > 0) {
                                         $matStock->decrement('stock', $deduct);
@@ -347,10 +356,11 @@ class SaleController extends Controller
                                     ->first();
 
                                 if ($recStock) {
+                                    $requiredQtyInStockUnit = UnitConversionService::convert($requiredQty, $recipeItem->unit_id, $recStock->unit_id);
                                     $current = (float) $recStock->stock;
                                     $deduct = $withoutRecipe
-                                        ? min(max(0.0, $current), $requiredQty)
-                                        : $requiredQty;
+                                        ? min(max(0.0, $current), $requiredQtyInStockUnit)
+                                        : $requiredQtyInStockUnit;
 
                                     if ($deduct > 0) {
                                         $recStock->decrement('stock', $deduct);
@@ -513,20 +523,22 @@ class SaleController extends Controller
                                     ->where('branch_id', $branchId)
                                     ->lockForUpdate()
                                     ->first();
-                                $matStock?->increment('stock', $requiredQty);
+                                $requiredQtyInStockUnit = UnitConversionService::convert($requiredQty, $recipeItem->unit_id, $matStock?->unit_id);
+                                $matStock?->increment('stock', $requiredQtyInStockUnit);
 
                                 if (Schema::hasColumn('materials', 'stock')) {
-                                    Material::where('id', $recipeItem->material_id)->increment('stock', $requiredQty);
+                                    Material::where('id', $recipeItem->material_id)->increment('stock', $requiredQtyInStockUnit);
                                 }
                             } elseif (! empty($recipeItem->product_recipe_id)) {
                                 $recStock = ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
                                     ->where('branch_id', $branchId)
                                     ->lockForUpdate()
                                     ->first();
-                                $recStock?->increment('stock', $requiredQty);
+                                $requiredQtyInStockUnit = UnitConversionService::convert($requiredQty, $recipeItem->unit_id, $recStock?->unit_id);
+                                $recStock?->increment('stock', $requiredQtyInStockUnit);
 
                                 if (Schema::hasColumn('product_recipes', 'stock')) {
-                                    ProductRecipe::where('id', $recipeItem->product_recipe_id)->increment('stock', $requiredQty);
+                                    ProductRecipe::where('id', $recipeItem->product_recipe_id)->increment('stock', $requiredQtyInStockUnit);
                                 }
                             }
                         }
@@ -649,6 +661,7 @@ class SaleController extends Controller
             'products' => $products,
             'materials' => $materials,
             'product_recipes' => $productRecipes,
+            'units' => Unit::select('id', 'name', 'value')->get(),
         ];
     }
 

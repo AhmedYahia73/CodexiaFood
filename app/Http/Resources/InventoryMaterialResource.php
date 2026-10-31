@@ -24,6 +24,8 @@ class InventoryMaterialResource extends JsonResource
             'deficit' => (float) ($this->stock - $this->actual_stock),
             'shortage' => (float) ($this->stock - $this->actual_stock),
             'difference' => (float) ($this->actual_stock - $this->stock),
+            'unit_id' => $this->unit_id,
+            'unit' => new UnitResource($this->whenLoaded('unit')),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

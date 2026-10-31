@@ -34,6 +34,10 @@ class InventoryDetailResource extends JsonResource
             $data['total_items'] = $this->inventoryMaterials->count();
             $data['total_deficit'] = (float) $this->inventoryMaterials->sum(fn ($i) => max(0, (float) $i->stock - (float) $i->actual_stock));
             $data['items'] = InventoryMaterialResource::collection($this->inventoryMaterials);
+        } elseif ($this->relationLoaded('inventoryAddons')) {
+            $data['total_items'] = $this->inventoryAddons->count();
+            $data['total_deficit'] = (float) $this->inventoryAddons->sum(fn ($i) => max(0, (float) $i->stock - (float) $i->actual_stock));
+            $data['items'] = InventoryAddonResource::collection($this->inventoryAddons);
         }
 
         return $data;

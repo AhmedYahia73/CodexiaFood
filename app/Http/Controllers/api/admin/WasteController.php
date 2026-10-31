@@ -9,6 +9,7 @@ use App\Models\Material;
 use App\Models\MaterialStock;
 use App\Models\ProductRecipe;
 use App\Models\ProductRecipeStock;
+use App\Models\Unit;
 use App\Models\Waste;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -273,6 +274,7 @@ class WasteController extends Controller
                     'stock' => $branchId ? (float) $item->stockForBranch((int) $branchId) : (float) $item->totalStock(),
                 ];
             }),
+            'units' => Unit::select('id', 'name', 'value')->get(),
         ];
     }
 }

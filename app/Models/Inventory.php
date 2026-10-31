@@ -31,4 +31,9 @@ class Inventory extends Model
     {
         return $this->hasMany(InventoryMaterial::class);
     }
+
+    public function inventoryAddons(): HasMany
+    {
+        return $this->hasMany(InventoryAddon::class);
+    }
 }

@@ -16,6 +16,7 @@ class ManufacturingList extends Model
         'product_id',
         'product_recipe_id',
         'count',
+        'unit_id',
     ];
 
     protected function casts(): array
@@ -23,6 +24,7 @@ class ManufacturingList extends Model
         return [
             'branch_id' => 'integer',
             'count' => 'integer',
+            'unit_id' => 'integer',
         ];
     }
 
@@ -39,6 +41,11 @@ class ManufacturingList extends Model
     public function productRecipe(): BelongsTo
     {
         return $this->belongsTo(ProductRecipe::class);
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class);
     }
 
     public function manufacturingRecipes(): HasMany

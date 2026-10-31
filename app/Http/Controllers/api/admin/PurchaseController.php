@@ -4,6 +4,8 @@ namespace App\Http\Controllers\api\admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PurchaseResource;
+use App\Models\Addon;
+use App\Models\AddonStock;
 use App\Models\Branch;
 use App\Models\Material;
 use App\Models\MaterialStock;
@@ -11,6 +13,8 @@ use App\Models\ProductRecipe;
 use App\Models\ProductRecipeStock;
 use App\Models\Purchase;
 use App\Models\Supplier;
+use App\Models\Unit;
+use App\Services\UnitConversionService;
 use App\trait\image;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,7 +55,7 @@ class PurchaseController extends Controller
         $perPage = (int) $request->get('per_page', 15);
         $page = (int) $request->get('page', 1);
 
-        $query = Purchase::with(['branch', 'supplier', 'items.material', 'items.productRecipe', 'dues'])->latest();
+        $query = Purchase::with(['branch', 'supplier', 'items.material', 'items.productRecipe', 'items.addon', 'dues'])->latest();
 
         if ($request->filled('branch_id')) {
             $query->where('branch_id', $request->branch_id);
@@ -94,16 +98,18 @@ class PurchaseController extends Controller
             'items' => 'required|array|min:1',
             'items.*.material_id' => 'nullable|integer|exists:materials,id',
             'items.*.product_recipe_id' => 'nullable|integer|exists:product_recipes,id',
+            'items.*.addon_id' => 'nullable|integer|exists:addons,id',
             'items.*.quantity' => 'required|numeric|min:0.01',
             'items.*.cost' => 'required|numeric|min:0',
+            'items.*.unit_id' => 'sometimes|nullable|integer|exists:units,id',
         ]);
 
-        // 3. Ensure each item specifies at least one material_id or product_recipe_id
+        // 3. Ensure each item specifies at least one material_id, product_recipe_id, or addon_id
         foreach ($validated['items'] as $index => $item) {
-            if (empty($item['material_id']) && empty($item['product_recipe_id'])) {
+            if (empty($item['material_id']) && empty($item['product_recipe_id']) && empty($item['addon_id'])) {
                 return response()->json([
                     'status' => false,
-                    'message' => "يجب تحديد مادة خام (material_id) أو وصفة منتج (product_recipe_id) أو كليهما في العنصر رقم {$index}.",
+                    'message' => "يجب تحديد مادة خام (material_id) أو وصفة منتج (product_recipe_id) أو إضافة (addon_id) في العنصر رقم {$index}.",
                 ], 422);
             }
         }
@@ -156,17 +162,24 @@ class PurchaseController extends Controller
                 $itemCost = (float) $itemData['cost'];
                 $materialId = ! empty($itemData['material_id']) ? (int) $itemData['material_id'] : null;
                 $recipeId = ! empty($itemData['product_recipe_id']) ? (int) $itemData['product_recipe_id'] : null;
+                $addonId = ! empty($itemData['addon_id']) ? (int) $itemData['addon_id'] : null;
 
                 // Increment Material stock for this branch by this item's quantity
                 if ($materialId) {
                     $matStock = MaterialStock::firstOrCreate(
                         ['material_id' => $materialId, 'branch_id' => $branchId],
-                        ['stock' => 0]
+                        ['stock' => 0, 'unit_id' => $itemData['unit_id'] ?? null]
                     );
-                    $matStock->increment('stock', $qty);
+
+                    if (! $matStock->unit_id && ! empty($itemData['unit_id'])) {
+                        $matStock->update(['unit_id' => $itemData['unit_id']]);
+                    }
+
+                    $incrementQty = UnitConversionService::convert($qty, $itemData['unit_id'] ?? null, $matStock->unit_id);
+                    $matStock->increment('stock', $incrementQty);
 
                     if (Schema::hasColumn('materials', 'stock')) {
-                        Material::where('id', $materialId)->increment('stock', $qty);
+                        Material::where('id', $materialId)->increment('stock', $incrementQty);
                     }
                 }
 
@@ -174,19 +187,41 @@ class PurchaseController extends Controller
                 if ($recipeId) {
                     $recStock = ProductRecipeStock::firstOrCreate(
                         ['product_recipe_id' => $recipeId, 'branch_id' => $branchId],
-                        ['stock' => 0]
+                        ['stock' => 0, 'unit_id' => $itemData['unit_id'] ?? null]
                     );
-                    $recStock->increment('stock', $qty);
+
+                    if (! $recStock->unit_id && ! empty($itemData['unit_id'])) {
+                        $recStock->update(['unit_id' => $itemData['unit_id']]);
+                    }
+
+                    $incrementQty = UnitConversionService::convert($qty, $itemData['unit_id'] ?? null, $recStock->unit_id);
+                    $recStock->increment('stock', $incrementQty);
 
                     if (Schema::hasColumn('product_recipes', 'stock')) {
-                        ProductRecipe::where('id', $recipeId)->increment('stock', $qty);
+                        ProductRecipe::where('id', $recipeId)->increment('stock', $incrementQty);
                     }
+                }
+
+                // Increment Addon stock for this branch by this item's quantity
+                if ($addonId) {
+                    $addonStock = AddonStock::firstOrCreate(
+                        ['addon_id' => $addonId, 'branch_id' => $branchId],
+                        ['stock' => 0, 'unit_id' => $itemData['unit_id'] ?? null]
+                    );
+
+                    if (! $addonStock->unit_id && ! empty($itemData['unit_id'])) {
+                        $addonStock->update(['unit_id' => $itemData['unit_id']]);
+                    }
+
+                    $incrementQty = UnitConversionService::convert($qty, $itemData['unit_id'] ?? null, $addonStock->unit_id);
+                    $addonStock->increment('stock', $incrementQty);
                 }
 
                 // Create PurchaseItem
                 $purchase->items()->create([
                     'material_id' => $materialId,
                     'product_recipe_id' => $recipeId,
+                    'addon_id' => $addonId,
                     'quantity' => $qty,
                     'cost' => $itemCost,
                 ]);
@@ -229,7 +264,7 @@ class PurchaseController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Purchase created successfully.',
-            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe', 'dues'])),
+            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe', 'items.addon', 'dues'])),
         ], 201);
     }
 
@@ -240,7 +275,7 @@ class PurchaseController extends Controller
     {
         return response()->json([
             'status' => true,
-            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe', 'dues'])),
+            'data' => new PurchaseResource($purchase->load(['branch', 'supplier', 'items.material', 'items.productRecipe', 'items.addon', 'dues'])),
         ]);
     }
 
@@ -276,6 +311,14 @@ class PurchaseController extends Controller
                     if (Schema::hasColumn('product_recipes', 'stock')) {
                         ProductRecipe::where('id', $item->product_recipe_id)->decrement('stock', $item->quantity);
                     }
+                }
+
+                if ($item->addon_id && $purchase->branch_id) {
+                    $addonStock = AddonStock::where('addon_id', $item->addon_id)
+                        ->where('branch_id', $purchase->branch_id)
+                        ->lockForUpdate()
+                        ->first();
+                    $addonStock?->decrement('stock', $item->quantity);
                 }
             }
 
@@ -334,6 +377,19 @@ class PurchaseController extends Controller
                 ];
             });
 
+        $addons = Addon::select('id', 'name', 'price')
+            ->get()
+            ->map(function ($item) use ($locale, $branchId) {
+                return [
+                    'id' => $item->id,
+                    'name' => is_array($item->name)
+                        ? ($item->name[$locale] ?? $item->name['ar'] ?? $item->name['en'] ?? '')
+                        : $item->name,
+                    'price' => (float) $item->price,
+                    'stock' => $branchId ? (float) $item->stockForBranch((int) $branchId) : (float) $item->totalStock(),
+                ];
+            });
+
         $suppliers = Supplier::select('id', 'name')->get()->map(function ($supplier) use ($locale) {
             return [
                 'id' => $supplier->id,
@@ -357,6 +413,8 @@ class PurchaseController extends Controller
             'suppliers' => $suppliers,
             'materials' => $materials,
             'product_recipes' => $productRecipes,
+            'addons' => $addons,
+            'units' => Unit::select('id', 'name', 'value')->get(),
         ];
     }
 
@@ -374,12 +432,13 @@ class PurchaseController extends Controller
                     $request->merge(['items' => $decoded]);
                 }
             }
-        } elseif ($request->has('quantity') && ($request->has('material_id') || $request->has('product_recipe_id'))) {
+        } elseif ($request->has('quantity') && ($request->has('material_id') || $request->has('product_recipe_id') || $request->has('addon_id'))) {
             $request->merge([
                 'items' => [
                     [
                         'material_id' => $request->input('material_id'),
                         'product_recipe_id' => $request->input('product_recipe_id'),
+                        'addon_id' => $request->input('addon_id'),
                         'quantity' => $request->input('quantity'),
                         'cost' => $request->input('cost', 0),
                     ],

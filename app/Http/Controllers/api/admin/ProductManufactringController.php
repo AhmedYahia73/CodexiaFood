@@ -8,6 +8,7 @@ use App\Models\Material;
 use App\Models\Product;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipe;
+use App\Models\Unit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,6 +32,7 @@ class ProductManufactringController extends Controller
             $data['product_recipes'] = ProductRecipe::select('id', 'name')->get();
             $data['materials'] = Material::select('id', 'name')->get();
         }
+        $data['units'] = Unit::select('id', 'name', 'value')->get();
 
         return response()->json([
             'status' => true,
@@ -74,6 +76,7 @@ class ProductManufactringController extends Controller
             'productRecipe',
             'productRecipeManufacturings.material',
             'productRecipeManufacturings.productRecipe',
+            'productRecipeManufacturings.unit',
         ]);
 
         $type = $validated['type'] ?? $request->get('type');
@@ -106,6 +109,7 @@ class ProductManufactringController extends Controller
                 'recipes.*.material_id' => 'nullable|exists:materials,id|required_without:recipes.*.product_recipe_id',
                 'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
                 'recipes.*.count' => 'required|integer|min:1',
+                'recipes.*.unit_id' => 'required|integer|exists:units,id',
             ]);
         } else {
             $validated = $request->validate([
@@ -113,6 +117,7 @@ class ProductManufactringController extends Controller
                 'recipes' => 'required|array|min:1',
                 'recipes.*.material_id' => 'required|exists:materials,id',
                 'recipes.*.count' => 'required|integer|min:1',
+                'recipes.*.unit_id' => 'required|integer|exists:units,id',
             ]);
         }
 
@@ -127,6 +132,7 @@ class ProductManufactringController extends Controller
                     'product_recipe_id' => $recipe['product_recipe_id'] ?? null,
                     'material_id' => $recipe['material_id'] ?? null,
                     'count' => $recipe['count'],
+                    'unit_id' => $recipe['unit_id'],
                 ]);
             }
 
@@ -138,6 +144,7 @@ class ProductManufactringController extends Controller
             'productRecipe',
             'productRecipeManufacturings.material',
             'productRecipeManufacturings.productRecipe',
+            'productRecipeManufacturings.unit',
         ]);
 
         return response()->json([
@@ -154,6 +161,7 @@ class ProductManufactringController extends Controller
             'productRecipe',
             'productRecipeManufacturings.material',
             'productRecipeManufacturings.productRecipe',
+            'productRecipeManufacturings.unit',
         ]);
 
         return response()->json([
@@ -173,6 +181,7 @@ class ProductManufactringController extends Controller
                 'recipes.*.material_id' => 'nullable|exists:materials,id|required_without:recipes.*.product_recipe_id',
                 'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
                 'recipes.*.count' => 'required|integer|min:1',
+                'recipes.*.unit_id' => 'required_with:recipes|integer|exists:units,id',
             ]);
         } else {
             $validated = $request->validate([
@@ -180,6 +189,7 @@ class ProductManufactringController extends Controller
                 'recipes' => 'sometimes|required|array|min:1',
                 'recipes.*.material_id' => 'required|exists:materials,id',
                 'recipes.*.count' => 'required|integer|min:1',
+                'recipes.*.unit_id' => 'required_with:recipes|integer|exists:units,id',
             ]);
         }
 
@@ -197,6 +207,7 @@ class ProductManufactringController extends Controller
                         'product_recipe_id' => $recipe['product_recipe_id'] ?? null,
                         'material_id' => $recipe['material_id'] ?? null,
                         'count' => $recipe['count'],
+                        'unit_id' => $recipe['unit_id'],
                     ]);
                 }
             }
@@ -207,6 +218,7 @@ class ProductManufactringController extends Controller
             'productRecipe',
             'productRecipeManufacturings.material',
             'productRecipeManufacturings.productRecipe',
+            'productRecipeManufacturings.unit',
         ]);
 
         return response()->json([

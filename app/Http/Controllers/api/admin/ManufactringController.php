@@ -13,6 +13,8 @@ use App\Models\Product;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipe;
 use App\Models\ProductRecipeStock;
+use App\Models\Unit;
+use App\Services\UnitConversionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -49,6 +51,7 @@ class ManufactringController extends Controller
             'productRecipe',
             'productRecipeManufacturings.material',
             'productRecipeManufacturings.productRecipe',
+            'productRecipeManufacturings.unit',
         ])->first();
 
         if (! $spec) {
@@ -72,6 +75,8 @@ class ManufactringController extends Controller
             'productRecipe',
             'manufacturingRecipes.material',
             'manufacturingRecipes.productRecipe',
+            'manufacturingRecipes.unit',
+            'unit',
         ])->latest();
 
         if ($request->filled('branch_id')) {
@@ -92,10 +97,12 @@ class ManufactringController extends Controller
             'product_id' => 'nullable|exists:products,id|required_without:product_recipe_id',
             'product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:product_id',
             'count' => 'required|integer|min:1',
+            'unit_id' => 'required|integer|exists:units,id',
             'recipes' => 'required|array|min:1',
             'recipes.*.material_id' => 'nullable|exists:materials,id|required_without:recipes.*.product_recipe_id',
             'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
             'recipes.*.count' => 'required|integer|min:1',
+            'recipes.*.unit_id' => 'required|integer|exists:units,id',
         ]);
 
         $branchId = (int) $validated['branch_id'];
@@ -105,6 +112,9 @@ class ManufactringController extends Controller
         $recipeStocks = [];
 
         foreach ($validated['recipes'] as $item) {
+            $itemCount = (float) $item['count'];
+            $itemUnitId = (int) $item['unit_id'];
+
             if (! empty($item['material_id'])) {
                 $matStock = MaterialStock::where('material_id', $item['material_id'])
                     ->where('branch_id', $branchId)
@@ -112,7 +122,9 @@ class ManufactringController extends Controller
                     ->first();
 
                 $availableStock = (float) ($matStock?->stock ?? 0);
-                if ($availableStock < $item['count']) {
+                $requiredStock = UnitConversionService::convert($itemCount, $itemUnitId, $matStock?->unit_id);
+
+                if ($availableStock < $requiredStock) {
                     $material = Material::find($item['material_id']);
                     $name = is_array($material?->name)
                         ? ($material->name['en'] ?? $material->name['ar'] ?? $item['material_id'])
@@ -120,10 +132,10 @@ class ManufactringController extends Controller
 
                     return response()->json([
                         'status' => false,
-                        'message' => "Insufficient stock in this branch for material '{$name}'. Available: {$availableStock}, Required: {$item['count']}.",
+                        'message' => "Insufficient stock in this branch for material '{$name}'. Available: {$availableStock}, Required: {$requiredStock}.",
                     ], 422);
                 }
-                $materialStocks[] = ['stockModel' => $matStock, 'count' => $item['count']];
+                $materialStocks[] = ['stockModel' => $matStock, 'count' => $requiredStock];
             } elseif (! empty($item['product_recipe_id'])) {
                 $recStock = ProductRecipeStock::where('product_recipe_id', $item['product_recipe_id'])
                     ->where('branch_id', $branchId)
@@ -131,7 +143,9 @@ class ManufactringController extends Controller
                     ->first();
 
                 $availableStock = (float) ($recStock?->stock ?? 0);
-                if ($availableStock < $item['count']) {
+                $requiredStock = UnitConversionService::convert($itemCount, $itemUnitId, $recStock?->unit_id);
+
+                if ($availableStock < $requiredStock) {
                     $recipe = ProductRecipe::find($item['product_recipe_id']);
                     $name = is_array($recipe?->name)
                         ? ($recipe->name['en'] ?? $recipe->name['ar'] ?? $item['product_recipe_id'])
@@ -139,10 +153,10 @@ class ManufactringController extends Controller
 
                     return response()->json([
                         'status' => false,
-                        'message' => "Insufficient stock in this branch for product recipe '{$name}'. Available: {$availableStock}, Required: {$item['count']}.",
+                        'message' => "Insufficient stock in this branch for product recipe '{$name}'. Available: {$availableStock}, Required: {$requiredStock}.",
                     ], 422);
                 }
-                $recipeStocks[] = ['stockModel' => $recStock, 'count' => $item['count']];
+                $recipeStocks[] = ['stockModel' => $recStock, 'count' => $requiredStock];
             }
         }
 
@@ -161,9 +175,15 @@ class ManufactringController extends Controller
             if (! empty($validated['product_recipe_id'])) {
                 $targetStock = ProductRecipeStock::firstOrCreate(
                     ['product_recipe_id' => $validated['product_recipe_id'], 'branch_id' => $branchId],
-                    ['stock' => 0]
+                    ['stock' => 0, 'unit_id' => $validated['unit_id']]
                 );
-                $targetStock->increment('stock', $validated['count']);
+
+                if (! $targetStock->unit_id && ! empty($validated['unit_id'])) {
+                    $targetStock->update(['unit_id' => $validated['unit_id']]);
+                }
+
+                $addCount = UnitConversionService::convert((float) $validated['count'], $validated['unit_id'], $targetStock->unit_id);
+                $targetStock->increment('stock', $addCount);
             }
 
             // Create ManufacturingList
@@ -172,6 +192,7 @@ class ManufactringController extends Controller
                 'product_id' => $validated['product_id'] ?? null,
                 'product_recipe_id' => $validated['product_recipe_id'] ?? null,
                 'count' => $validated['count'],
+                'unit_id' => $validated['unit_id'],
             ]);
 
             // Create ManufacturingRecipe items
@@ -180,6 +201,7 @@ class ManufactringController extends Controller
                     'material_id' => $recipe['material_id'] ?? null,
                     'product_recipe_id' => $recipe['product_recipe_id'] ?? null,
                     'count' => $recipe['count'],
+                    'unit_id' => $recipe['unit_id'],
                 ]);
             }
 
@@ -192,6 +214,8 @@ class ManufactringController extends Controller
             'productRecipe',
             'manufacturingRecipes.material',
             'manufacturingRecipes.productRecipe',
+            'manufacturingRecipes.unit',
+            'unit',
         ]);
 
         return response()->json([
@@ -209,6 +233,8 @@ class ManufactringController extends Controller
             'productRecipe',
             'manufacturingRecipes.material',
             'manufacturingRecipes.productRecipe',
+            'manufacturingRecipes.unit',
+            'unit',
         ]);
 
         return response()->json([
@@ -238,6 +264,7 @@ class ManufactringController extends Controller
                     'stock' => $branchId ? (float) $item->stockForBranch((int) $branchId) : (float) $item->totalStock(),
                 ];
             }),
+            'units' => Unit::select('id', 'name', 'value')->get(),
         ];
     }
 }

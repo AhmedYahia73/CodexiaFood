@@ -6,6 +6,7 @@ use App\Models\Material;
 use App\Models\MaterialStock;
 use App\Models\ProductRecipe;
 use App\Models\ProductRecipeStock;
+use App\Models\Unit;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Tests\TestCase;
@@ -22,6 +23,7 @@ beforeEach(function () {
 
     $this->branchA = Branch::create(['name' => ['ar' => 'فرع المعادي', 'en' => 'Maadi Branch']]);
     $this->branchB = Branch::create(['name' => ['ar' => 'فرع الزمالك', 'en' => 'Zamalek Branch']]);
+    $this->unit = Unit::create(['name' => ['ar' => 'قطعة', 'en' => 'Piece'], 'value' => 1]);
 });
 
 test('purchasing in branch A increments only branch A stock and leaves branch B untouched', function () {
@@ -93,10 +95,12 @@ test('manufacturing in branch A checks branch A stock and increments product rec
             'branch_id' => $this->branchA->id,
             'product_recipe_id' => $recipe->id,
             'count' => 5,
+            'unit_id' => $this->unit->id,
             'recipes' => [
                 [
                     'material_id' => $material->id,
                     'count' => 10,
+                    'unit_id' => $this->unit->id,
                 ],
             ],
         ]);

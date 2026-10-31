@@ -16,6 +16,7 @@ use App\Http\Controllers\api\admin\ExpenseListController;
 use App\Http\Controllers\api\admin\FinancialAccountController;
 use App\Http\Controllers\api\admin\HallController;
 use App\Http\Controllers\api\admin\HallTableController;
+use App\Http\Controllers\api\admin\InventoryAddonController;
 use App\Http\Controllers\api\admin\InventoryMaterialController;
 use App\Http\Controllers\api\admin\InventoryRecipeController;
 use App\Http\Controllers\api\admin\KitchenController;
@@ -36,6 +37,7 @@ use App\Http\Controllers\api\admin\SalerController;
 use App\Http\Controllers\api\admin\ShiftController;
 use App\Http\Controllers\api\admin\SupplierController;
 use App\Http\Controllers\api\admin\TaxController;
+use App\Http\Controllers\api\admin\UnitController;
 use App\Http\Controllers\api\admin\WasteController;
 use App\Http\Controllers\api\AuthController;
 use App\Http\Controllers\api\branch\AddonController as BranchAddonController;
@@ -46,6 +48,7 @@ use App\Http\Controllers\api\branch\DeliveryController as BranchDeliveryControll
 use App\Http\Controllers\api\branch\FinancialAccountController as BranchFinancialAccountController;
 use App\Http\Controllers\api\branch\HallController as BranchHallController;
 use App\Http\Controllers\api\branch\HallTableController as BranchHallTableController;
+use App\Http\Controllers\api\branch\InventoryAddonController as BranchInventoryAddonController;
 use App\Http\Controllers\api\branch\InventoryMaterialController as BranchInventoryMaterialController;
 use App\Http\Controllers\api\branch\InventoryRecipeController as BranchInventoryRecipeController;
 use App\Http\Controllers\api\branch\KitchenController as BranchKitchenController;
@@ -118,6 +121,7 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::get('suppliers/select-options', [SupplierController::class, 'selectOptions']);
     Route::get('salers/select-options', [SalerController::class, 'selectOptions']);
     Route::get('taxes/select-options', [TaxController::class, 'selectOptions']);
+    Route::get('units/select-options', [UnitController::class, 'selectOptions']);
     Route::get('wastes/select-options', [WasteController::class, 'selectOptions']);
     Route::get('purchases/select-options', [PurchaseController::class, 'selectOptions']);
     Route::get('sales/select-options', [SaleController::class, 'selectOptions']);
@@ -174,6 +178,7 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('suppliers', SupplierController::class);
     Route::apiResource('salers', SalerController::class);
     Route::apiResource('taxes', TaxController::class);
+    Route::apiResource('units', UnitController::class);
     Route::apiResource('wastes', WasteController::class);
 
     // Purchase Dues (Installments)
@@ -226,6 +231,18 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
         Route::put('{inventory}/status', [InventoryMaterialController::class, 'changeStatus']);
     });
     Route::put('inventory/material-items/{item}', [InventoryMaterialController::class, 'updateItem']);
+
+    // Inventory routes for Addons
+    Route::prefix('inventory/addons')->group(function () {
+        Route::get('select-options', [InventoryAddonController::class, 'selectOptions']);
+        Route::get('pending', [InventoryAddonController::class, 'pending']);
+        Route::get('history', [InventoryAddonController::class, 'history']);
+        Route::post('/', [InventoryAddonController::class, 'store']);
+        Route::get('{inventory}', [InventoryAddonController::class, 'show']);
+        Route::put('{inventory}/items', [InventoryAddonController::class, 'updateActualStocks']);
+        Route::put('{inventory}/status', [InventoryAddonController::class, 'changeStatus']);
+    });
+    Route::put('inventory/addon-items/{item}', [InventoryAddonController::class, 'updateItem']);
 });
 
 /*
@@ -314,6 +331,18 @@ Route::middleware(['auth:branch', 'role:branch'])->prefix('branch')->group(funct
         Route::put('{inventory}/status', [BranchInventoryMaterialController::class, 'changeStatus']);
     });
     Route::put('inventory/material-items/{item}', [BranchInventoryMaterialController::class, 'updateItem']);
+
+    // Inventory routes for Addons
+    Route::prefix('inventory/addons')->group(function () {
+        Route::get('select-options', [BranchInventoryAddonController::class, 'selectOptions']);
+        Route::get('pending', [BranchInventoryAddonController::class, 'pending']);
+        Route::get('history', [BranchInventoryAddonController::class, 'history']);
+        Route::post('/', [BranchInventoryAddonController::class, 'store']);
+        Route::get('{inventory}', [BranchInventoryAddonController::class, 'show']);
+        Route::put('{inventory}/items', [BranchInventoryAddonController::class, 'updateActualStocks']);
+        Route::put('{inventory}/status', [BranchInventoryAddonController::class, 'changeStatus']);
+    });
+    Route::put('inventory/addon-items/{item}', [BranchInventoryAddonController::class, 'updateItem']);
 });
 
 /*
@@ -413,7 +442,6 @@ Route::prefix('user')->group(function () {
 */
 Route::get('orders/{code}', [UserOrderController::class, 'showByCode'])->name('orders.public.show');
 Route::get('orders/{code}/qr', [UserOrderController::class, 'qr'])->name('orders.public.qr');
- 
 
 /*
 |--------------------------------------------------------------------------

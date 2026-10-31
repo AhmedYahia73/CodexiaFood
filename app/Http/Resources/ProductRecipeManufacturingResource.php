@@ -32,6 +32,8 @@ class ProductRecipeManufacturingResource extends JsonResource
                 'stock' => $this->when($branchId !== null, fn () => (float) $this->productRecipe->stockForBranch((int) $branchId)),
             ] : null,
             'count' => (int) $this->count,
+            'unit_id' => $this->unit_id,
+            'unit' => new UnitResource($this->whenLoaded('unit')),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

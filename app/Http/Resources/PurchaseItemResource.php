@@ -30,6 +30,11 @@ class PurchaseItemResource extends JsonResource
             ? ($recipeName[$locale] ?? $recipeName['ar'] ?? $recipeName['en'] ?? null)
             : $recipeName;
 
+        $addonName = $this->addon?->name;
+        $localizedAddonName = is_array($addonName)
+            ? ($addonName[$locale] ?? $addonName['ar'] ?? $addonName['en'] ?? null)
+            : $addonName;
+
         return [
             'id' => $this->id,
             'purchase_id' => $this->purchase_id,
@@ -39,6 +44,9 @@ class PurchaseItemResource extends JsonResource
             'product_recipe_id' => $this->product_recipe_id,
             'product_recipe_name' => $localizedRecipeName,
             'product_recipe' => new ProductRecipeResource($this->whenLoaded('productRecipe')),
+            'addon_id' => $this->addon_id,
+            'addon_name' => $localizedAddonName,
+            'addon' => new AddonResource($this->whenLoaded('addon')),
             'quantity' => (float) $this->quantity,
             'cost' => (float) $this->cost,
             'created_at' => $this->created_at?->toIso8601String(),

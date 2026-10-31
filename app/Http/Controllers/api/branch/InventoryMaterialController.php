@@ -10,6 +10,8 @@ use App\Models\Inventory;
 use App\Models\InventoryMaterial;
 use App\Models\Material;
 use App\Models\MaterialStock;
+use App\Models\Unit;
+use App\Services\UnitConversionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -28,6 +30,7 @@ class InventoryMaterialController extends BaseBranchController
             'status' => true,
             'data' => [
                 'branches' => Branch::where('id', $branchId)->select('id', 'name')->get(),
+                'units' => Unit::select('id', 'name', 'value')->get(),
             ],
         ]);
     }
@@ -54,22 +57,25 @@ class InventoryMaterialController extends BaseBranchController
             $materials = Material::all();
 
             foreach ($materials as $material) {
-                $stock = (float) (MaterialStock::where('material_id', $material->id)
+                $matStock = MaterialStock::where('material_id', $material->id)
                     ->where('branch_id', $branchId)
-                    ->value('stock') ?? 0);
+                    ->first();
+                $stock = (float) ($matStock?->stock ?? 0);
+                $unitId = $matStock?->unit_id;
 
                 InventoryMaterial::create([
                     'inventory_id' => $inventory->id,
                     'material_id' => $material->id,
                     'stock' => $stock,
                     'actual_stock' => $stock,
+                    'unit_id' => $unitId,
                 ]);
             }
 
             return $inventory;
         });
 
-        $inventory->load(['branch', 'inventoryMaterials.material']);
+        $inventory->load(['branch', 'inventoryMaterials.material', 'inventoryMaterials.unit']);
 
         return response()->json([
             'status' => true,
@@ -136,7 +142,7 @@ class InventoryMaterialController extends BaseBranchController
     public function show(Inventory $inventory): JsonResponse
     {
         $this->ensureBelongsToBranch($inventory);
-        $inventory->load(['branch', 'inventoryMaterials.material']);
+        $inventory->load(['branch', 'inventoryMaterials.material', 'inventoryMaterials.unit']);
 
         return response()->json([
             'status' => true,
@@ -159,6 +165,7 @@ class InventoryMaterialController extends BaseBranchController
 
         $validated = $request->validate([
             'actual_stock' => 'required|numeric|min:0',
+            'unit_id' => 'sometimes|nullable|integer|exists:units,id',
         ]);
 
         if ($item->inventory->status !== 'pending') {
@@ -168,14 +175,19 @@ class InventoryMaterialController extends BaseBranchController
             ], 422);
         }
 
-        $item->update([
+        $dataToUpdate = [
             'actual_stock' => $validated['actual_stock'],
-        ]);
+        ];
+        if (array_key_exists('unit_id', $validated)) {
+            $dataToUpdate['unit_id'] = $validated['unit_id'];
+        }
+
+        $item->update($dataToUpdate);
 
         return response()->json([
             'status' => true,
             'message' => 'تم تحديث الرصيد الفعلي للمادة بنجاح',
-            'data' => new InventoryMaterialResource($item->load('material')),
+            'data' => new InventoryMaterialResource($item->load(['material', 'unit'])),
         ]);
     }
 
@@ -197,19 +209,25 @@ class InventoryMaterialController extends BaseBranchController
             'items' => 'required|array|min:1',
             'items.*.id' => 'required|integer|exists:inventory_materials,id',
             'items.*.actual_stock' => 'required|numeric|min:0',
+            'items.*.unit_id' => 'sometimes|nullable|integer|exists:units,id',
         ]);
 
         DB::transaction(function () use ($validated, $inventory): void {
             foreach ($validated['items'] as $itemData) {
+                $updateData = [
+                    'actual_stock' => $itemData['actual_stock'],
+                ];
+                if (array_key_exists('unit_id', $itemData)) {
+                    $updateData['unit_id'] = $itemData['unit_id'];
+                }
+
                 InventoryMaterial::where('id', $itemData['id'])
                     ->where('inventory_id', $inventory->id)
-                    ->update([
-                        'actual_stock' => $itemData['actual_stock'],
-                    ]);
+                    ->update($updateData);
             }
         });
 
-        $inventory->load(['branch', 'inventoryMaterials.material']);
+        $inventory->load(['branch', 'inventoryMaterials.material', 'inventoryMaterials.unit']);
 
         return response()->json([
             'status' => true,
@@ -245,15 +263,23 @@ class InventoryMaterialController extends BaseBranchController
                 $inventory->load('inventoryMaterials');
 
                 foreach ($inventory->inventoryMaterials as $item) {
-                    MaterialStock::updateOrCreate(
+                    $stockModel = MaterialStock::firstOrCreate(
                         [
                             'branch_id' => $branchId,
                             'material_id' => $item->material_id,
                         ],
                         [
-                            'stock' => $item->actual_stock,
+                            'stock' => 0,
+                            'unit_id' => $item->unit_id,
                         ]
                     );
+
+                    if (! $stockModel->unit_id && $item->unit_id) {
+                        $stockModel->update(['unit_id' => $item->unit_id]);
+                    }
+
+                    $convertedStock = UnitConversionService::convert((float) $item->actual_stock, $item->unit_id, $stockModel->unit_id);
+                    $stockModel->update(['stock' => $convertedStock]);
                 }
             }
 
@@ -262,7 +288,7 @@ class InventoryMaterialController extends BaseBranchController
             ]);
         });
 
-        $inventory->load(['branch', 'inventoryMaterials.material']);
+        $inventory->load(['branch', 'inventoryMaterials.material', 'inventoryMaterials.unit']);
 
         $message = $newStatus === 'approve'
             ? 'تم اعتماد الجرد وتحديث أرصدة مخزون الفرع بنجاح'

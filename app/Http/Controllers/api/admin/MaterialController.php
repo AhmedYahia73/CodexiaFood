@@ -7,6 +7,7 @@ use App\Http\Resources\MaterialResource;
 use App\Models\Branch;
 use App\Models\Category;
 use App\Models\Material;
+use App\Models\Unit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -154,6 +155,7 @@ class MaterialController extends Controller
         return [
             'branches' => Branch::select('id', 'name')->get(),
             'categories' => $query->select('id', 'name', 'type')->get(),
+            'units' => Unit::select('id', 'name', 'value')->get(),
         ];
     }
 

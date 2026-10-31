@@ -15,6 +15,7 @@ class InventoryMaterial extends Model
         'material_id',
         'stock',
         'actual_stock',
+        'unit_id',
     ];
 
     protected function casts(): array
@@ -22,6 +23,7 @@ class InventoryMaterial extends Model
         return [
             'stock' => 'float',
             'actual_stock' => 'float',
+            'unit_id' => 'integer',
         ];
     }
 
@@ -33,5 +35,10 @@ class InventoryMaterial extends Model
     public function material(): BelongsTo
     {
         return $this->belongsTo(Material::class);
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class);
     }
 }

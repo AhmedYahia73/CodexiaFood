@@ -16,6 +16,7 @@ class PurchaseItem extends Model
         'purchase_id',
         'material_id',
         'product_recipe_id',
+        'addon_id',
         'quantity',
         'cost',
     ];
@@ -41,5 +42,10 @@ class PurchaseItem extends Model
     public function productRecipe(): BelongsTo
     {
         return $this->belongsTo(ProductRecipe::class);
+    }
+
+    public function addon(): BelongsTo
+    {
+        return $this->belongsTo(Addon::class);
     }
 }

@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipe;
 use App\Models\ProductRecipeStock;
+use App\Models\Unit;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
@@ -57,23 +58,31 @@ beforeEach(function () {
         'category_id' => $this->category->id,
     ]);
 
+    $this->unit = Unit::create([
+        'name' => ['en' => 'Piece', 'ar' => 'قطعة'],
+        'value' => 1,
+    ]);
+
     // Seed branch stock
     MaterialStock::create([
         'material_id' => $this->beefMaterial->id,
         'branch_id' => $this->branch->id,
         'stock' => 50,
+        'unit_id' => $this->unit->id,
     ]);
 
     MaterialStock::create([
         'material_id' => $this->bunMaterial->id,
         'branch_id' => $this->branch->id,
         'stock' => 20,
+        'unit_id' => $this->unit->id,
     ]);
 
     ProductRecipeStock::create([
         'product_recipe_id' => $this->beefPattyRecipe->id,
         'branch_id' => $this->branch->id,
         'stock' => 10,
+        'unit_id' => $this->unit->id,
     ]);
 });
 
@@ -111,10 +120,12 @@ test('admin can perform full CRUD on ProductManufacturing specification', functi
                 [
                     'product_recipe_id' => $this->beefPattyRecipe->id,
                     'count' => 1,
+                    'unit_id' => $this->unit->id,
                 ],
                 [
                     'material_id' => $this->bunMaterial->id,
                     'count' => 1,
+                    'unit_id' => $this->unit->id,
                 ],
             ],
         ]);
@@ -142,6 +153,7 @@ test('admin can perform full CRUD on ProductManufacturing specification', functi
                 [
                     'material_id' => $this->bunMaterial->id,
                     'count' => 2,
+                    'unit_id' => $this->unit->id,
                 ],
             ],
         ]);
@@ -166,6 +178,7 @@ test('admin can fetch specification with available stock for manufacturing by br
     $spec->productRecipeManufacturings()->create([
         'material_id' => $this->bunMaterial->id,
         'count' => 2,
+        'unit_id' => $this->unit->id,
     ]);
 
     $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
@@ -184,10 +197,12 @@ test('manufacturing fails when branch ingredient stock is insufficient', functio
             'branch_id' => $this->branch->id,
             'product_id' => $this->product->id,
             'count' => 5,
+            'unit_id' => $this->unit->id,
             'recipes' => [
                 [
                     'material_id' => $this->bunMaterial->id,
                     'count' => 30, // exceeds available stock 20
+                    'unit_id' => $this->unit->id,
                 ],
             ],
         ]);
@@ -206,14 +221,17 @@ test('manufacturing succeeds and accurately updates branch stocks and creates hi
             'branch_id' => $this->branch->id,
             'product_id' => $this->product->id,
             'count' => 5, // produce 5 cheeseburgers
+            'unit_id' => $this->unit->id,
             'recipes' => [
                 [
                     'material_id' => $this->bunMaterial->id,
                     'count' => 5, // consume 5 buns
+                    'unit_id' => $this->unit->id,
                 ],
                 [
                     'product_recipe_id' => $this->beefPattyRecipe->id,
                     'count' => 5, // consume 5 patties
+                    'unit_id' => $this->unit->id,
                 ],
             ],
         ]);
@@ -262,10 +280,12 @@ test('manufacturing a product recipe increments recipe branch stock and decremen
             'branch_id' => $this->branch->id,
             'product_recipe_id' => $this->beefPattyRecipe->id,
             'count' => 8, // produce 8 patties
+            'unit_id' => $this->unit->id,
             'recipes' => [
                 [
                     'material_id' => $this->beefMaterial->id,
                     'count' => 16, // consume 16 units of minced beef
+                    'unit_id' => $this->unit->id,
                 ],
             ],
         ]);

@@ -32,6 +32,8 @@ class ManufacturingListResource extends JsonResource
                 'stock' => $branchId ? $this->productRecipe->stockForBranch((int) $branchId) : $this->productRecipe->totalStock(),
             ] : null,
             'count' => (int) $this->count,
+            'unit_id' => $this->unit_id,
+            'unit' => new UnitResource($this->whenLoaded('unit')),
             'recipes' => ManufacturingRecipeResource::collection($this->whenLoaded('manufacturingRecipes')),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

@@ -14,6 +14,7 @@ class MaterialStock extends Model
         'material_id',
         'branch_id',
         'stock',
+        'unit_id',
     ];
 
     protected function casts(): array
@@ -22,6 +23,7 @@ class MaterialStock extends Model
             'material_id' => 'integer',
             'branch_id' => 'integer',
             'stock' => 'decimal:2',
+            'unit_id' => 'integer',
         ];
     }
 
@@ -33,5 +35,10 @@ class MaterialStock extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class);
     }
 }

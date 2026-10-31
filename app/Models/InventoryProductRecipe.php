@@ -15,6 +15,7 @@ class InventoryProductRecipe extends Model
         'product_recipe_id',
         'stock',
         'actual_stock',
+        'unit_id',
     ];
 
     protected function casts(): array
@@ -22,6 +23,7 @@ class InventoryProductRecipe extends Model
         return [
             'stock' => 'float',
             'actual_stock' => 'float',
+            'unit_id' => 'integer',
         ];
     }
 
@@ -33,5 +35,10 @@ class InventoryProductRecipe extends Model
     public function productRecipe(): BelongsTo
     {
         return $this->belongsTo(ProductRecipe::class);
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class);
     }
 }
