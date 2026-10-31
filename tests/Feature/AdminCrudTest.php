@@ -427,11 +427,12 @@ test('admin can perform CRUD on HallTable model with branches & halls select opt
     expect($selectHalls[0])->toHaveKeys(['id', 'name']);
 
     $tableId = $storeResponse->json('data.id');
+    $tableCode = $storeResponse->json('data.code');
     $qrUrl = $storeResponse->json('data.qr');
 
     expect($qrUrl)->not->toBeNull();
-    expect($qrUrl)->toContain("/storage/qrcodes/tables/table_{$tableId}.svg");
-    Storage::disk('public')->assertExists("qrcodes/tables/table_{$tableId}.svg");
+    expect($qrUrl)->toContain("/storage/qrcodes/tables/table_{$tableCode}.svg");
+    Storage::disk('public')->assertExists("qrcodes/tables/table_{$tableCode}.svg");
 
     // Verify show endpoint returns the qr code url
     $this->withHeader('Authorization', 'Bearer '.$this->token)
@@ -449,7 +450,7 @@ test('admin can perform CRUD on HallTable model with branches & halls select opt
         ->deleteJson("/api/admin/hall-tables/{$tableId}")
         ->assertStatus(200);
 
-    Storage::disk('public')->assertMissing("qrcodes/tables/table_{$tableId}.svg");
+    Storage::disk('public')->assertMissing("qrcodes/tables/table_{$tableCode}.svg");
 });
 
 test('admin can fetch dedicated select-options for all controllers returning strictly id and name', function () {

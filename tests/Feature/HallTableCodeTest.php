@@ -3,10 +3,13 @@
 use App\Http\Resources\HallTableResource;
 use App\Models\Admin;
 use App\Models\Branch;
+use App\Models\BusinessSetup;
 use App\Models\Hall;
 use App\Models\HallTable;
 use App\Models\Product;
+use App\Services\QrCodeService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Tests\TestCase;
@@ -178,4 +181,34 @@ test('cart store, index, and clear work seamlessly using table_code', function (
         ->assertStatus(200);
 
     expect($emptyRes->json('data'))->toHaveCount(0);
+});
+
+test('generateForTable uses table_order_url from business_setups table first', function () {
+    BusinessSetup::create([
+        'name' => 'Codexa Restaurant',
+        'phone' => '01012345678',
+        'face' => 'https://facebook.com/codexa',
+        'instagram' => 'https://instagram.com/codexa',
+        'whats' => '01012345678',
+        'logo' => 'business/logo.png',
+        'description' => 'Codexa description',
+        'table_order_url' => 'https://menu.codexaecommerce.com',
+    ]);
+
+    $table = HallTable::create([
+        'name' => 'T7',
+        'branch_id' => $this->branch->id,
+        'hall_id' => $this->hall->id,
+        'status' => true,
+    ]);
+
+    $qrCodeService = app(QrCodeService::class);
+    $path = $qrCodeService->generateForTable($table);
+
+    expect($path)->toBe("qrcodes/tables/table_{$table->code}.svg");
+    Storage::disk('public')->assertExists($path);
+
+    $svgContent = Storage::disk('public')->get($path);
+    // SimpleSoftwareIO QrCode generates SVG containing the content or path
+    expect($svgContent)->not->toBeEmpty();
 });

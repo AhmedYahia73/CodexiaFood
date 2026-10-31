@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BusinessSetup;
 use App\Models\HallTable;
 use App\Models\Order;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
@@ -13,9 +14,26 @@ class QrCodeService
     /**
      * Generate and store QR code for a hall table.
      */
-    public function generateForTable(HallTable $table, $request): string
+    public function generateForTable(HallTable $table, mixed $request = null): string
     {
-        $content = $request->base_url."/table/{$table->code}";
+        $businessSetup = BusinessSetup::first();
+        $baseUrl = $businessSetup?->table_order_url;
+
+        if (empty($baseUrl) && $request) {
+            $baseUrl = $request instanceof Request
+                ? $request->get('base_url')
+                : ($request->base_url ?? ($request['base_url'] ?? null));
+        }
+
+        if (empty($baseUrl)) {
+            $baseUrl = config('app.url');
+        }
+
+        $baseUrl = rtrim($baseUrl, '/');
+        $content = str_ends_with($baseUrl, '/table')
+            ? "{$baseUrl}/{$table->code}"
+            : "{$baseUrl}/table/{$table->code}";
+
         $directory = 'qrcodes/tables';
         $fileName = "table_{$table->code}.svg";
         $path = "{$directory}/{$fileName}";
