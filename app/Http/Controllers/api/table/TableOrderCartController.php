@@ -47,11 +47,15 @@ class TableOrderCartController extends Controller
 
     private function resolveHallTable(array $validated): ?HallTable
     {
-        if (! empty($validated['table_code'])) {
-            return HallTable::with('branch')->where('code', $validated['table_code'])->first();
+        $code = $validated['table_code'] ?? $validated['code'] ?? null;
+        if (! empty($code)) {
+            $table = HallTable::with('branch')->where('code', $code)->first();
+            if ($table) {
+                return $table;
+            }
         }
 
-        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? $validated['table'] ?? null;
         if ($tableId) {
             return HallTable::with('branch')->find((int) $tableId);
         }
@@ -77,9 +81,11 @@ class TableOrderCartController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
-            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|integer|exists:hall_tables,id',
-            'hall_table_id' => 'required_without_all:table_code,table_id|nullable|integer|exists:hall_tables,id',
+            'table_code' => 'sometimes|nullable|string|exists:hall_tables,code',
+            'code' => 'sometimes|nullable|string|exists:hall_tables,code',
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+            'table' => 'sometimes|nullable|integer|exists:hall_tables,id',
             'captain_order_id' => 'sometimes|nullable|integer|exists:captain_orders,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
@@ -93,7 +99,7 @@ class TableOrderCartController extends Controller
         if (! $hallTable) {
             return response()->json([
                 'status' => false,
-                'message' => 'يرجى تحديد كود الطاولة (table_code)',
+                'message' => 'يرجى تحديد كود أو معرف الطاولة (table_code or table_id)',
                 'data' => [],
                 'grand_totals' => [
                     'grand_total_price' => 0.00,
@@ -137,9 +143,11 @@ class TableOrderCartController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
-            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|exists:hall_tables,id',
-            'hall_table_id' => 'nullable|exists:hall_tables,id',
+            'table_code' => 'sometimes|nullable|string|exists:hall_tables,code',
+            'code' => 'sometimes|nullable|string|exists:hall_tables,code',
+            'table_id' => 'sometimes|nullable|exists:hall_tables,id',
+            'hall_table_id' => 'sometimes|nullable|exists:hall_tables,id',
+            'table' => 'sometimes|nullable|exists:hall_tables,id',
             'captain_order_id' => 'sometimes|nullable|integer|exists:captain_orders,id',
             'product_id' => 'required|exists:products,id',
             'quantity' => 'nullable|integer|min:1',
@@ -162,7 +170,7 @@ class TableOrderCartController extends Controller
         if (! $hallTable) {
             return response()->json([
                 'status' => false,
-                'message' => 'يرجى تحديد كود الطاولة (table_code)',
+                'message' => 'يرجى تحديد كود أو معرف الطاولة (table_code or table_id)',
             ], 400);
         }
 
@@ -383,9 +391,11 @@ class TableOrderCartController extends Controller
     public function clear(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'table_code' => 'required_without_all:table_id,hall_table_id|nullable|string|exists:hall_tables,code',
-            'table_id' => 'required_without_all:table_code,hall_table_id|nullable|integer|exists:hall_tables,id',
-            'hall_table_id' => 'required_without_all:table_code,table_id|nullable|integer|exists:hall_tables,id',
+            'table_code' => 'sometimes|nullable|string|exists:hall_tables,code',
+            'code' => 'sometimes|nullable|string|exists:hall_tables,code',
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+            'table' => 'sometimes|nullable|integer|exists:hall_tables,id',
             'lat' => 'nullable|numeric',
             'lng' => 'nullable|numeric',
             'latitude' => 'nullable|numeric',
@@ -397,7 +407,7 @@ class TableOrderCartController extends Controller
         if (! $hallTable) {
             return response()->json([
                 'status' => false,
-                'message' => 'يرجى تحديد كود الطاولة (table_code)',
+                'message' => 'يرجى تحديد كود أو معرف الطاولة (table_code or table_id)',
             ], 400);
         }
 

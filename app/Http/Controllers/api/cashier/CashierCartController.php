@@ -34,7 +34,7 @@ class CashierCartController extends Controller
         return str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
     }
 
-    private function cartQuery(int $cashierId, ?int $tableId = null): Builder
+    private function cartQuery(?int $cashierId, ?int $tableId = null): Builder
     {
         return OrderCart::with([
             'hallTable.hall',
@@ -43,17 +43,15 @@ class CashierCartController extends Controller
             'variationCarts.variation',
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
-        ])->where(function ($query) use ($cashierId, $tableId) {
-            // شرط الكاشير: الكاشير المحدد أو غير محدد
+        ])->when($tableId, function ($query, $tableId) {
+            // عند تحديد الطاولة: جلب كافة عناصر سلة الطاولة بغض النظر عن الكاشير
+            $query->where('hall_table_id', $tableId);
+        }, function ($query) use ($cashierId) {
+            // في حالة عدم تحديد طاولة (سفري / دليفري): الفلترة حسب الكاشير الحالي
             $query->where(function ($q) use ($cashierId) {
                 $q->where('cashier_id', $cashierId)
-                ->orWhereNull('cashier_id');
+                    ->orWhereNull('cashier_id');
             });
-
-            // إضافة شرط الطاولة باستخدام OR إذا كانت القيمة موجودة
-            if ($tableId) {
-                $query->orWhere('hall_table_id', $tableId);
-            }
         });
     }
 
@@ -62,8 +60,10 @@ class CashierCartController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $tableId = $request->input('table_id') ?? $request->input('hall_table_id');
         $cashierId = auth()->user()?->cashier_id;
-        if (! $cashierId) {
+
+        if (! $tableId && ! $cashierId) {
             return response()->json([
                 'status' => false,
                 'message' => 'يرجى تحديد جهاز الكاشير أولاً',
@@ -599,15 +599,17 @@ class CashierCartController extends Controller
             'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
         ]);
 
-        $query = OrderCart::where('cashier_id', $cashierId);
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+
+        $query = OrderCart::query();
+        if (! empty($tableId)) {
+            $query->where('hall_table_id', $tableId);
+        } else {
+            $query->where('cashier_id', $cashierId);
+        }
 
         if (! empty($validated['module'])) {
             $query->where('module', $validated['module']);
-        }
-
-        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
-        if (! empty($tableId)) {
-            $query->where('hall_table_id', $tableId);
         }
 
         $query->delete();

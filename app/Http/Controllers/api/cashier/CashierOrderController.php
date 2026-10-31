@@ -14,6 +14,7 @@ use App\Models\OrderPAddon;
 use App\Models\OrderPOption;
 use App\Models\OrderProduct;
 use App\Models\OrderPVariation;
+use App\Models\PaymentMethod;
 use App\Models\ProductManufacturing;
 use App\Models\ProductRecipeStock;
 use App\Models\StartShift;
@@ -606,8 +607,8 @@ class CashierOrderController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'تم إنشاء الطلب بنجاح من السلة', 
-            'qr_base64' => $qrBase64, 
+            'message' => 'تم إنشاء الطلب بنجاح من السلة',
+            'qr_base64' => $qrBase64,
             'data' => new OrderResource($order),
         ], 201);
     }
