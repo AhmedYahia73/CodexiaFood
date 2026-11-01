@@ -56,6 +56,7 @@ class BusinessSetupResource extends JsonResource
             'table_order_url' => $this->table_order_url,
             'has_gift' => (bool) ($this->has_gift ?? false),
             'price_gift' => (int) ($this->price_gift ?? 1),
+            'dinein_tax' => (float) ($this->dinein_tax ?? 0.0),
             'is_open' => (bool) $this->isOpen(),
             'is_overnight' => (bool) $this->isOvernight(),
             'working_hours_text' => 'من '.($this->start_day ? substr((string) $this->start_day, 0, 5) : '09:00').' إلى '.($this->end_day ? substr((string) $this->end_day, 0, 5) : '03:00'),

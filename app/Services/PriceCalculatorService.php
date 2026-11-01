@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Addon;
+use App\Models\BusinessSetup;
 use App\Models\Discount;
 use App\Models\Option;
 use App\Models\OrderCart;
@@ -11,17 +12,39 @@ use App\Models\Tax;
 
 class PriceCalculatorService
 {
+    protected ?float $cachedDineinTax = null;
+
     /**
-     * Calculate price, discount_val, tax_val, and final_price for a product.
-     *
-     * @return array{price: float, discount_val: float, tax_val: float, final_price: float}
+     * Get dine-in tax rate percentage from business setup (cached in memory per request/service instance).
      */
-    public function calculateProduct(Product $product): array
+    public function getDineinTax(): float
+    {
+        if ($this->cachedDineinTax === null) {
+            $this->cachedDineinTax = (float) (BusinessSetup::first()?->dinein_tax ?? 0.0);
+        }
+
+        return $this->cachedDineinTax;
+    }
+
+    /**
+     * Set or clear the cached dine-in tax rate.
+     */
+    public function setCachedDineinTax(?float $dineinTax): void
+    {
+        $this->cachedDineinTax = $dineinTax;
+    }
+
+    /**
+     * Calculate price, discount_val, tax_val, dinein_tax_val, and final_price for a product.
+     *
+     * @return array{price: float, discount_val: float, tax_val: float, dinein_tax_val: float, final_price: float}
+     */
+    public function calculateProduct(Product $product, float $dineinTaxPercent = 0.0, ?Discount $customDiscount = null): array
     {
         $price = (float) $product->price;
 
         $discountVal = 0.00;
-        $discount = $product->discount;
+        $discount = $customDiscount ?? $product->discount;
         if ($discount && ($discount->status ?? true)) {
             if ($discount->type === 'percentage') {
                 $discountVal = round($price * ($discount->amount / 100), 2);
@@ -42,12 +65,19 @@ class PriceCalculatorService
             }
         }
 
+        $dineinTaxVal = 0.00;
+        if ($dineinTaxPercent > 0) {
+            $dineinTaxVal = round($priceAfterDiscount * ($dineinTaxPercent / 100), 2);
+            $taxVal = round($taxVal + $dineinTaxVal, 2);
+        }
+
         $finalPrice = round($price - $discountVal + $taxVal, 2);
 
         return [
             'price' => $price,
             'discount_val' => $discountVal,
             'tax_val' => $taxVal,
+            'dinein_tax_val' => $dineinTaxVal,
             'final_price' => $finalPrice,
         ];
     }
@@ -130,11 +160,16 @@ class PriceCalculatorService
      *
      * @return array<string, mixed>
      */
-    public function calculateCartItem(OrderCart $cart, string $locale = 'ar'): array
+    public function calculateCartItem(OrderCart $cart, string $locale = 'ar', ?float $dineinTax = null): array
     {
         $product = $cart->product;
         $qty = max(1, (int) $cart->quantity);
         $isGift = (bool) ($cart->is_gift ?? false);
+        $effectiveDiscount = $cart->discount ?? $product->discount;
+
+        $dineinTaxRate = ($cart->module === 'dinein')
+            ? ($dineinTax ?? $this->getDineinTax())
+            : 0.0;
 
         if ($isGift) {
             $giftPrice = (float) ($cart->price ?? 1.00);
@@ -142,10 +177,11 @@ class PriceCalculatorService
                 'price' => $giftPrice,
                 'discount_val' => 0.00,
                 'tax_val' => 0.00,
+                'dinein_tax_val' => 0.00,
                 'final_price' => $giftPrice,
             ];
         } else {
-            $productPricing = $this->calculateProduct($product);
+            $productPricing = $this->calculateProduct($product, $dineinTaxRate, $effectiveDiscount);
         }
 
         $sumOptionsPrice = 0.00;
@@ -168,7 +204,7 @@ class PriceCalculatorService
                         'final_price' => 0.00,
                     ];
                 } else {
-                    $optPricing = $this->calculateOption($option, $product->discount, $product->tax);
+                    $optPricing = $this->calculateOption($option, $effectiveDiscount, $product->tax);
                 }
 
                 $sumOptionsPrice += $optPricing['price'];
@@ -277,6 +313,15 @@ class PriceCalculatorService
             'cashier_id' => $cart->cashier_id,
             'cashier_man_id' => $cart->cashier_man_id,
             'branch_id' => $cart->branch_id,
+            'discount_id' => $cart->discount_id,
+            'discount' => $effectiveDiscount ? [
+                'id' => $effectiveDiscount->id,
+                'name' => is_array($effectiveDiscount->name)
+                    ? ($effectiveDiscount->name[$locale] ?? $effectiveDiscount->name['ar'] ?? $effectiveDiscount->name['en'] ?? '')
+                    : $effectiveDiscount->name,
+                'type' => $effectiveDiscount->type,
+                'amount' => (float) $effectiveDiscount->amount,
+            ] : null,
             'product' => [
                 'id' => $product->id,
                 'name' => $prodName,
@@ -285,6 +330,7 @@ class PriceCalculatorService
                 'price' => $productPricing['price'],
                 'discount_val' => $productPricing['discount_val'],
                 'tax_val' => $productPricing['tax_val'],
+                'dinein_tax_val' => $productPricing['dinein_tax_val'] ?? 0.00,
                 'final_price' => $productPricing['final_price'],
             ],
             'variations' => $variationsData,

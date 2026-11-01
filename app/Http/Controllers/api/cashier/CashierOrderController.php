@@ -24,6 +24,7 @@ use App\Services\QrCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -578,6 +579,13 @@ class CashierOrderController extends Controller
 
             // Clear checked out cart items
             OrderCart::whereIn('id', $carts->pluck('id'))->delete();
+
+            if ($tableId) {
+                Cache::forget("cashier_cart_discount:dinein:table_{$tableId}");
+            }
+            if ($cashierId) {
+                Cache::forget("cashier_cart_discount:{$validated['module']}:cashier_{$cashierId}");
+            }
 
             return $order;
         });

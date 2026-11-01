@@ -369,6 +369,9 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::post('expenses', [CashierExpenseController::class, 'store']);
 
     Route::delete('cart/clear', [CashierCartController::class, 'clear']);
+    Route::get('cart/discounts', [CashierCartController::class, 'discounts']);
+    Route::get('discounts', [CashierCartController::class, 'discounts']);
+    Route::post('cart/apply-discount', [CashierCartController::class, 'applyDiscount']);
     Route::apiResource('cart', CashierCartController::class);
 
     Route::post('orders/checkout', [CashierOrderController::class, 'checkout']);

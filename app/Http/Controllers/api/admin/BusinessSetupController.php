@@ -93,6 +93,15 @@ class BusinessSetupController extends Controller
             'price_gift' => 'sometimes|nullable|integer|min:0',
 
             /**
+             * Dine-in tax percentage rate applied to dine-in orders.
+             *
+             * @var float|null
+             *
+             * @example 14.0
+             */
+            'dinein_tax' => 'sometimes|nullable|numeric|min:0',
+
+            /**
              * Menu images (array of uploaded image files or existing image paths/URLs).
              *
              * @var array<string>|null
@@ -158,6 +167,7 @@ class BusinessSetupController extends Controller
             'table_order_url' => $validated['table_order_url'] ?? ($setup?->table_order_url ?? null),
             'has_gift' => array_key_exists('has_gift', $validated) ? (bool) $validated['has_gift'] : ($setup?->has_gift ?? false),
             'price_gift' => array_key_exists('price_gift', $validated) && ! is_null($validated['price_gift']) ? (int) $validated['price_gift'] : ($setup?->price_gift ?? 1),
+            'dinein_tax' => array_key_exists('dinein_tax', $validated) && ! is_null($validated['dinein_tax']) ? (float) $validated['dinein_tax'] : ($setup?->dinein_tax ?? 0.0),
         ];
 
         if (array_key_exists('start_day', $validated)) {

@@ -13,6 +13,7 @@ use App\Models\Option;
 use App\Models\Product;
 use App\Models\Tax;
 use App\Models\Variation;
+use App\Services\PriceCalculatorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Tests\TestCase;
@@ -194,6 +195,204 @@ test('cashier cart index calculates item totals and grand totals correctly', fun
     expect((float) $grand['grand_total_discount'])->toBe(48.0);
     expect((float) $grand['grand_total_tax'])->toBe(26.88);
     expect((float) $grand['grand_final_price'])->toBe(238.88);
+});
+
+test('dinein_tax from business setup is applied as percentage on products when module is dinein and not takeaway', function () {
+    // Set dinein_tax to 10% in BusinessSetup
+    BusinessSetup::create([
+        'name' => 'مطعم التجربة',
+        'phone' => '01000000000',
+        'face' => 'https://facebook.com',
+        'instagram' => 'https://instagram.com',
+        'whats' => '01000000000',
+        'logo' => 'logo.png',
+        'description' => 'وصف',
+        'dinein_tax' => 10.0,
+    ]);
+
+    // Clear price calculator cached tax
+    app(PriceCalculatorService::class)->setCachedDineinTax(null);
+
+    // 1. Add dinein cart item:
+    // Product price = 100, discount 20% = 20, price after discount = 80
+    // Base tax 14% on (80) = 11.20
+    // Dinein tax 10% on (80) = 8.00
+    // Total product tax = 11.20 + 8.00 = 19.20
+    // Final product price = 80 + 19.20 = 99.20
+    $dineinRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(201);
+
+    expect((float) $dineinRes->json('data.product.tax_val'))->toBe(19.2)
+        ->and((float) $dineinRes->json('data.product.dinein_tax_val'))->toBe(8.0)
+        ->and((float) $dineinRes->json('data.product.final_price'))->toBe(99.2)
+        ->and((float) $dineinRes->json('data.total_tax'))->toBe(19.2)
+        ->and((float) $dineinRes->json('data.total_final_price'))->toBe(99.2);
+
+    // 2. Add takeaway cart item with same product:
+    // Dinein tax must NOT be applied to takeaway
+    $takeawayRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(201);
+
+    expect((float) $takeawayRes->json('data.product.tax_val'))->toBe(11.2)
+        ->and((float) $takeawayRes->json('data.product.dinein_tax_val'))->toBe(0.0)
+        ->and((float) $takeawayRes->json('data.product.final_price'))->toBe(91.2)
+        ->and((float) $takeawayRes->json('data.total_tax'))->toBe(11.2)
+        ->and((float) $takeawayRes->json('data.total_final_price'))->toBe(91.2);
+});
+
+test('cashier can fetch active discounts for selection', function () {
+    Discount::create([
+        'name' => ['ar' => 'خصم نشط 10%', 'en' => 'Active 10%'],
+        'type' => 'percentage',
+        'amount' => 10.0,
+        'status' => true,
+    ]);
+
+    Discount::create([
+        'name' => ['ar' => 'خصم معطل', 'en' => 'Inactive'],
+        'type' => 'value',
+        'amount' => 50.0,
+        'status' => false,
+    ]);
+
+    $res = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart/discounts?lang=ar')
+        ->assertStatus(200)
+        ->assertJsonPath('status', true);
+
+    $items = collect($res->json('data'));
+    expect($items->contains('name', 'خصم نشط 10%'))->toBeTrue()
+        ->and($items->contains('name', 'خصم معطل'))->toBeFalse();
+
+    // Also check /api/cashier/discounts route
+    $resDirect = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/discounts?lang=en')
+        ->assertStatus(200);
+
+    expect(collect($resDirect->json('data'))->contains('name', 'Active 10%'))->toBeTrue();
+});
+
+test('cashier can apply discount to cart and it updates all current items', function () {
+    // Create a product without catalog discount and without tax for simplicity
+    $plainProduct = Product::create([
+        'name' => ['ar' => 'ساندوتش كلاسيك', 'en' => 'Classic Sandwich'],
+        'price' => 100.00,
+        'image' => 'products/plain.jpg',
+    ]);
+
+    $cartDiscount = Discount::create([
+        'name' => ['ar' => 'خصم صالة 15%', 'en' => 'Dinein 15%'],
+        'type' => 'percentage',
+        'amount' => 15.00,
+        'status' => true,
+    ]);
+
+    // Add 2 items to takeaway cart
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $plainProduct->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(201);
+
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'takeaway',
+            'product_id' => $plainProduct->id,
+            'quantity' => 2,
+        ])
+        ->assertStatus(201);
+
+    // Apply 15% discount to this takeaway cart
+    $applyRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart/apply-discount', [
+            'module' => 'takeaway',
+            'discount_id' => $cartDiscount->id,
+        ])
+        ->assertStatus(200)
+        ->assertJsonPath('status', true)
+        ->assertJsonPath('applied_discount_id', $cartDiscount->id);
+
+    // Total quantity = 1 + 2 = 3
+    // Price = 100 * 3 = 300
+    // Discount 15% = 45.00
+    // Final = 255.00
+    expect((float) $applyRes->json('grand_totals.grand_total_price'))->toBe(300.0)
+        ->and((float) $applyRes->json('grand_totals.grand_total_discount'))->toBe(45.0)
+        ->and((float) $applyRes->json('grand_totals.grand_final_price'))->toBe(255.0);
+});
+
+test('when cart has active discount newly added items automatically inherit the discount', function () {
+    $plainProduct = Product::create([
+        'name' => ['ar' => 'ساندوتش كلاسيك', 'en' => 'Classic Sandwich'],
+        'price' => 100.00,
+        'image' => 'products/plain.jpg',
+    ]);
+
+    $cartDiscount = Discount::create([
+        'name' => ['ar' => 'خصم صالة 20%', 'en' => 'Dinein 20%'],
+        'type' => 'percentage',
+        'amount' => 20.00,
+        'status' => true,
+    ]);
+
+    // 1. First add one item to table cart
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'product_id' => $plainProduct->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(201);
+
+    // 2. Apply 20% discount to this table cart
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart/apply-discount', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'discount_id' => $cartDiscount->id,
+        ])
+        ->assertStatus(200);
+
+    // 3. Add a NEW item to the cart without specifying discount_id in request
+    $newAddRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'product_id' => $plainProduct->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(201);
+
+    // The newly added item must have discount_id = 20% and discount_val = 20.00 automatically!
+    expect($newAddRes->json('data.discount_id'))->toBe($cartDiscount->id)
+        ->and((float) $newAddRes->json('data.product.discount_val'))->toBe(20.0)
+        ->and((float) $newAddRes->json('data.total_discount'))->toBe(20.0);
+
+    // 4. Test removing the discount
+    $removeRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart/apply-discount', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'discount_id' => null,
+        ])
+        ->assertStatus(200)
+        ->assertJsonPath('applied_discount_id', null);
+
+    expect((float) $removeRes->json('grand_totals.grand_total_discount'))->toBe(0.0);
 });
 
 test('cart is fetched by cashier_id so another cashier_man on the same desk sees the cart', function () {

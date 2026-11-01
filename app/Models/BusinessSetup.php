@@ -27,6 +27,7 @@ class BusinessSetup extends Model
         'table_order_url',
         'has_gift',
         'price_gift',
+        'dinein_tax',
         'menu',
     ];
 
@@ -36,6 +37,7 @@ class BusinessSetup extends Model
         'end_day' => '03:00:00',
         'has_gift' => false,
         'price_gift' => 1,
+        'dinein_tax' => 0.0,
     ];
 
     protected function casts(): array
@@ -44,6 +46,7 @@ class BusinessSetup extends Model
             'branch_cover' => 'decimal:2',
             'has_gift' => 'boolean',
             'price_gift' => 'integer',
+            'dinein_tax' => 'double',
             'menu' => 'array',
         ];
     }

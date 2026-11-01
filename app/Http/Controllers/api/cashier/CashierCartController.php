@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api\cashier;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessSetup;
 use App\Models\Cashier;
+use App\Models\Discount;
 use App\Models\MaterialStock;
 use App\Models\OrderAddonCart;
 use App\Models\OrderCart;
@@ -16,6 +17,7 @@ use App\Services\PriceCalculatorService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class CashierCartController extends Controller
@@ -34,12 +36,22 @@ class CashierCartController extends Controller
         return str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
     }
 
+    private function getCartScopeKey(string $module, ?int $tableId, ?int $cashierId): string
+    {
+        if ($module === 'dinein') {
+            return "cashier_cart_discount:dinein:table_{$tableId}";
+        }
+
+        return "cashier_cart_discount:{$module}:cashier_{$cashierId}";
+    }
+
     private function cartQuery(?int $cashierId, ?int $tableId = null): Builder
     {
         return OrderCart::with([
             'hallTable.hall',
             'product.discount',
             'product.tax',
+            'discount',
             'variationCarts.variation',
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
@@ -223,6 +235,15 @@ class CashierCartController extends Controller
             'notes' => 'nullable|string',
 
             /**
+             * Discount ID to apply to this item or cart.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'discount_id' => 'sometimes|nullable|integer|exists:discounts,id',
+
+            /**
              * Variations.
              *
              * @var array|null
@@ -331,10 +352,35 @@ class CashierCartController extends Controller
 
         $locale = $this->getLocale($request);
 
-        $cart = DB::transaction(function () use ($validated, $tableId, $cashierId, $branchId, $hasGift, $priceGift): OrderCart {
+        $scopeKey = $this->getCartScopeKey($validated['module'], $tableId, $cashierId);
+
+        $discountId = null;
+        if (array_key_exists('discount_id', $validated)) {
+            $discountId = $validated['discount_id'] ? (int) $validated['discount_id'] : null;
+        } else {
+            $existingDiscountId = OrderCart::where('module', $validated['module'])
+                ->when($validated['module'] === 'dinein', function ($q) use ($tableId) {
+                    $q->where('hall_table_id', $tableId);
+                }, function ($q) use ($cashierId) {
+                    $q->where(function ($sub) use ($cashierId) {
+                        $sub->where('cashier_id', $cashierId)->orWhereNull('cashier_id');
+                    });
+                })
+                ->whereNotNull('discount_id')
+                ->value('discount_id');
+
+            $discountId = $existingDiscountId ?? Cache::get($scopeKey);
+        }
+
+        if ($discountId) {
+            Cache::put($scopeKey, $discountId, now()->addHours(12));
+        }
+
+        $cart = DB::transaction(function () use ($validated, $tableId, $cashierId, $branchId, $hasGift, $priceGift, $discountId): OrderCart {
             $cart = OrderCart::create([
                 'module' => $validated['module'],
                 'product_id' => $validated['product_id'],
+                'discount_id' => $discountId,
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
                 'branch_id' => $branchId,
@@ -401,6 +447,7 @@ class CashierCartController extends Controller
         $cart->load([
             'product.discount',
             'product.tax',
+            'discount',
             'variationCarts.variation',
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
@@ -429,6 +476,7 @@ class CashierCartController extends Controller
         $cart->load([
             'product.discount',
             'product.tax',
+            'discount',
             'variationCarts.variation',
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
@@ -451,6 +499,7 @@ class CashierCartController extends Controller
             'module' => 'sometimes|required|in:takeaway,dinein,delivery',
             'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
+            'discount_id' => 'sometimes|nullable|integer|exists:discounts,id',
             'variations' => 'nullable|array',
             'variations.*.variation_id' => 'required_with:variations|exists:variations,id',
             'variations.*.option_ids' => 'required_with:variations|array',
@@ -471,6 +520,9 @@ class CashierCartController extends Controller
             }
             if (array_key_exists('notes', $validated)) {
                 $updateData['notes'] = $validated['notes'];
+            }
+            if (array_key_exists('discount_id', $validated)) {
+                $updateData['discount_id'] = $validated['discount_id'];
             }
 
             if (! empty($updateData)) {
@@ -530,6 +582,7 @@ class CashierCartController extends Controller
         $cart->load([
             'product.discount',
             'product.tax',
+            'discount',
             'variationCarts.variation',
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
@@ -610,6 +663,8 @@ class CashierCartController extends Controller
 
         if (! empty($validated['module'])) {
             $query->where('module', $validated['module']);
+            $scopeKey = $this->getCartScopeKey($validated['module'], $tableId, $cashierId);
+            Cache::forget($scopeKey);
         }
 
         $query->delete();
@@ -617,6 +672,158 @@ class CashierCartController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'تم تفريغ السلة بنجاح',
+        ]);
+    }
+
+    /**
+     * Fetch active discounts for selection in cashier cart.
+     */
+    public function discounts(Request $request): JsonResponse
+    {
+        $request->validate([
+            /**
+             * Response language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $locale = $this->getLocale($request);
+
+        $discounts = Discount::where('status', true)
+            ->get()
+            ->map(function (Discount $discount) use ($locale) {
+                $name = is_array($discount->name)
+                    ? ($discount->name[$locale] ?? $discount->name['ar'] ?? $discount->name['en'] ?? '')
+                    : $discount->name;
+
+                return [
+                    'id' => $discount->id,
+                    'name' => $name,
+                    'raw_name' => $discount->name,
+                    'type' => $discount->type,
+                    'amount' => (float) $discount->amount,
+                ];
+            });
+
+        return response()->json([
+            'status' => true,
+            'data' => $discounts,
+        ]);
+    }
+
+    /**
+     * Apply or remove a discount for the current cart (by module and table_id or cashier_id).
+     */
+    public function applyDiscount(Request $request): JsonResponse
+    {
+        $cashierId = auth()->user()?->cashier_id;
+        if (! $cashierId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد جهاز الكاشير أولاً',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            /**
+             * Order module enum.
+             *
+             * @var string
+             *
+             * @example takeaway
+             */
+            'module' => 'required|in:takeaway,dinein,delivery',
+
+            /**
+             * Hall Table ID for dinein cart.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Hall Table ID alias for dinein cart.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Discount ID to apply to the cart. Pass null or omit to remove discount.
+             *
+             * @var int|null
+             *
+             * @example 2
+             */
+            'discount_id' => 'nullable|integer|exists:discounts,id',
+
+            /**
+             * Response language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $locale = $this->getLocale($request);
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+
+        if ($validated['module'] === 'dinein' && ! $tableId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد الطاولة لتطبيق الخصم على الطلب المحلي',
+            ], 422);
+        }
+
+        $scopeKey = $this->getCartScopeKey($validated['module'], $tableId, $cashierId);
+        $discountId = $validated['discount_id'] ?? null;
+
+        if ($discountId) {
+            $discount = Discount::where('id', $discountId)->where('status', true)->first();
+            if (! $discount) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'الخصم المحدد غير متاح أو معطل حالياً',
+                ], 422);
+            }
+            Cache::put($scopeKey, $discountId, now()->addHours(12));
+        } else {
+            Cache::forget($scopeKey);
+        }
+
+        // Update all current items in this cart
+        $this->cartQuery($cashierId, $validated['module'] === 'dinein' ? $tableId : null)
+            ->where('module', $validated['module'])
+            ->update(['discount_id' => $discountId]);
+
+        // Fetch refreshed cart items and totals
+        $carts = $this->cartQuery($cashierId, $validated['module'] === 'dinein' ? $tableId : null)
+            ->where('module', $validated['module'])
+            ->orderByRaw('COALESCE(parent_id, id) ASC, id ASC')
+            ->get();
+
+        $calculatedItems = $carts->map(
+            fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale)
+        )->all();
+
+        $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems);
+
+        return response()->json([
+            'status' => true,
+            'message' => $discountId ? 'تم تطبيق الخصم على السلة بنجاح' : 'تم إلغاء الخصم من السلة بنجاح',
+            'applied_discount_id' => $discountId,
+            'data' => $calculatedItems,
+            'grand_totals' => $grandTotals,
         ]);
     }
 }

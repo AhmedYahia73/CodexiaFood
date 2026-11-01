@@ -17,6 +17,7 @@ class OrderCart extends Model
     protected $fillable = [
         'module',
         'product_id',
+        'discount_id',
         'cashier_id',
         'cashier_man_id',
         'branch_id',
@@ -52,6 +53,11 @@ class OrderCart extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function discount(): BelongsTo
+    {
+        return $this->belongsTo(Discount::class);
     }
 
     public function variationCarts(): HasMany

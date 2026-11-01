@@ -218,6 +218,46 @@ test('admin can set has_gift and price_gift keys in business setup', function ()
         ->and($setup->price_gift)->toBe(2);
 });
 
+test('admin can set and update dinein_tax key in business setup', function () {
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/admin/business-setup', [
+            'name' => 'مطعم الضريبة',
+            'phone' => '01011112222',
+            'face' => 'https://facebook.com/tax',
+            'instagram' => 'https://instagram.com/tax',
+            'whats' => '01011112222',
+            'logo' => 'business_setup/tax_logo.png',
+            'description' => 'مطعم بتطبيق ضريبة الصالة',
+            'dinein_tax' => 14.5,
+        ]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('status', true);
+    expect((float) $response->json('data.dinein_tax'))->toBe(14.5);
+
+    $setup = BusinessSetup::first();
+    expect((float) $setup->dinein_tax)->toBe(14.5);
+
+    // Update dinein_tax
+    $updateResponse = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->putJson('/api/admin/business-setup', [
+            'name' => 'مطعم الضريبة المحدث',
+            'phone' => '01011112222',
+            'face' => 'https://facebook.com/tax',
+            'instagram' => 'https://instagram.com/tax',
+            'whats' => '01011112222',
+            'logo' => 'business_setup/tax_logo.png',
+            'description' => 'مطعم بتطبيق ضريبة الصالة المحدثة',
+            'dinein_tax' => 12.0,
+        ]);
+
+    $updateResponse->assertStatus(200)
+        ->assertJsonPath('status', true);
+    expect((float) $updateResponse->json('data.dinein_tax'))->toBe(12.0);
+
+    expect((float) $setup->fresh()->dinein_tax)->toBe(12.0);
+});
+
 test('admin can save business setup with menu images and see them as links', function () {
     Storage::fake('public');
 
