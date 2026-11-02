@@ -371,6 +371,10 @@ class TableOrderCartController extends Controller
             'long' => 'nullable|numeric',
         ]);
 
+        return response()->json([
+            'status' => false,
+            'message' => 'لا يمكنك حذف العناصر بعد طلبها',
+        ], 400);
         $cart->loadMissing(['hallTable.branch', 'branch']);
         $branch = $cart->hallTable?->branch ?? $cart->branch;
         if ($response = $this->validateGeofence($request, $branch)) {
