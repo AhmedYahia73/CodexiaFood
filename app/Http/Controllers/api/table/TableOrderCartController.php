@@ -413,9 +413,7 @@ class TableOrderCartController extends Controller
 
         if ($response = $this->validateGeofence($request, $hallTable->branch)) {
             return $response;
-        }
-
-        OrderCart::where('hall_table_id', $hallTable->id)->delete();
+        } 
 
         return response()->json([
             'status' => true,
