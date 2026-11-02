@@ -399,13 +399,7 @@ class CashierOrderController extends Controller
             'addonCarts.addon.discount',
             'addonCarts.addon.tax',
         ])
-            ->where('module', $validated['module'])
-            ->where(function ($query) use ($cashierId, $validated) {
-                $query->where('cashier_id', $cashierId);
-                if ($validated['module'] === 'dinein') {
-                    $query->orWhereNull('cashier_id');
-                }
-            });
+            ->where('module', $validated['module']);
 
         if ($validated['module'] === 'dinein') {
             if (! $tableId) {
@@ -414,7 +408,13 @@ class CashierOrderController extends Controller
                     'message' => 'يرجى تحديد الطاولة لإتمام الطلب المحلي (طاولة)',
                 ], 422);
             }
+            // عند تحديد الطاولة: جلب كافة عناصر سلة الطاولة بغض النظر عن الكاشير (مطابق لـ CashierCartController)
             $cartsQuery->where('hall_table_id', $tableId);
+        } else {
+            $cartsQuery->where(function ($query) use ($cashierId) {
+                $query->where('cashier_id', $cashierId)
+                    ->orWhereNull('cashier_id');
+            });
         }
 
         $carts = $cartsQuery->get();
