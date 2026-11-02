@@ -1,26 +1,23 @@
-# توثيق الـ API الخاص بسلة ونقاط بيع الكاشير (Cashier POS & Cart Documentation)
-## الخصومات، التوريث التلقائي للخصم، وضريبة الصالة (Cart Discounts, Auto-Inheritance & Dine-in Tax)
+# توثيق الـ API المحدث لسلة ونقاط بيع الكاشير (Cashier POS & Cart Documentation)
+## التحديث المحاسبي: فصل ضريبة الصالة في مفاتيح مستقلة وإدارة الخصومات
 
-هذا التوثيق موجه لمطوري الواجهة الأمامية وتطبيقات الكاشير والـ POS (Frontend & Mobile Developers).
+هذا التوثيق موجه لمطوري الواجهة الأمامية وتطبيقات الكاشير والـ POS (Frontend & Mobile App Developers).
 
 ---
 
-## 📌 الميزات الجديدة والمعدلة في هذا التحديث (What's New)
+## 📌 ملخص التعديل المحاسبي الجديد (Accounting Update)
 
-1. **جلب قائمة الخصومات للاختيار (Discounts Selection API)**:
-   - نقطة نهاية جديدة تتيح للكاشير جلب جميع الخصومات النشطة (`status = true`) لعرضها في قائمة منسدلة أو نافذة منبثقة (Modal).
-2. **تطبيق أو إزالة الخصم على السلة (Apply / Remove Cart Discount)**:
-   - إمكانية تحديد `discount_id` وتطبيقه على سلة الكاشير الحالية بناءً على نوع الطلب (`module`) ومعرف الطاولة (`table_id` للصالة) أو جهاز الكاشير (`cashier_id` للسفري/الدليفري).
-   - إمكانية إرسال `discount_id: null` لإلغاء وتفريغ الخصم من السلة.
-3. **التوريث التلقائي للخصم عند إضافة أصناف جديدة (Automatic Discount Inheritance)**:
-   - بمجرد أن يختار الكاشير خصماً للسلة، أي صنف جديد تتم إضافته بعد ذلك (`POST /api/cashier/cart`) **يرث هذا الخصم تلقائياً وبشكل فوري** دون الحاجة لإعادة تحديد الخصم لكل صنف.
-4. **تطبيق ضريبة الصالة كنسبة مئوية (`dinein_tax`)**:
-   - عند اختيار نوع الطلب محلي / صالة (`module = dinein`)، يتم احتساب نسبة ضريبة الصالة تلقائياً على المنتجات بعد الخصم وإرجاع قيمتها في حقل `'dinein_tax_val'` مع إضافتها لإجمالي الضرائب والسعر النهائي.
+تم **فصل ضريبة الصالة (`dinein_tax`) بشكل كامل ومستقل عن الضريبة الأساسية للمنتج (`tax_val`)** في استجابات السلة والطلبات وفي قاعدة البيانات، بحيث:
+1. **الضريبة الأساسية للمنتج (`tax_val` / `total_tax` / `grand_total_tax`)**: تمثل ضريبة القيمة المضافة (VAT) أو الضريبة المعرفة على الصنف في المنيو فقط، ولا يُدمج معها أي ضريبة أخرى.
+2. **ضريبة الصالة (`dinein_tax_val` / `total_dinein_tax` / `grand_total_dinein_tax`)**: تُحسب كبند مستقل تماماً كنسبة من السعر بعد الخصم عند اختيار الطلب محلي / صالة (`module = dinein`).
+3. **تسجيل النسبة في السلة (`order_carts.dinein_tax`)**: يتم حفظ نسبة ضريبة الصالة المطبقة على الصنف داخل قاعدة البيانات في جدول `order_carts`.
+4. **تسجيل إجمالي ضريبة الصالة في الفاتورة النهائية (`orders.total_dinein_tax`)**: يتم تخزين ضريبة الصالة في عمود مستقل في جدول الطلبات `orders` ومورد الطلب `OrderResource`.
+5. **إدارة الخصومات والتوريث التلقائي**: إمكانية تطبيق/إلغاء خصم على السلة بالكامل، وتوريث هذا الخصم تلقائياً لأي صنف يضاف لاحقاً.
 
 ---
 
 ## 🔐 معلومات المصادقة والترويسات المشتركة (Headers)
-يجب إرسال الترويسات التالية مع كافة طلبات الكاشير:
+يجب إرسال الترويسات التالية مع كافة الطلبات:
 
 ```http
 Authorization: Bearer <CASHIER_MAN_JWT_TOKEN>
@@ -30,12 +27,12 @@ Content-Type: application/json
 
 ---
 
-## 1️⃣ جلب قائمة الخصومات المتاحة للاختيار (Get Active Discounts)
+## 1️⃣ استعراض الخصومات المتاحة للاختيار (Get Active Discounts)
 
-استرجاع جميع الخصومات النشطة الصالحة للاستخدام في نقاط البيع لتعبئة القائمة المنسدلة (Dropdown/Modal) لاختيار الخصم.
+جلب الخصومات النشطة فقط (`status = true`) لملء قائمة الاختيار (Dropdown/Modal) في شاشة الكاشير.
 
 - **Method**: `GET`
-- **URL**: `/api/cashier/cart/discounts`  *(أو المسار المختصر: `/api/cashier/discounts`)*
+- **URL**: `/api/cashier/cart/discounts` *(أو المسار المباشر: `/api/cashier/discounts`)*
 - **Headers**:
   ```http
   Authorization: Bearer <TOKEN>
@@ -44,9 +41,9 @@ Content-Type: application/json
 - **Query Parameters**:
   | المعامل (Param) | النوع | إجباري/اختياري | الوصف |
   |---|---|---|---|
-  | `lang` | string | اختياري | لغة اسم الخصم (`ar` أو `en`). الافتراضي: `ar`. |
+  | `lang` | string | اختياري | لغة اسم الخصم (`ar` أو `en`). القيمة الافتراضية: `ar`. |
 
-### 🟢 نموذج استجابة ناجحة (Success Response - 200 OK):
+### 🟢 استجابة ناجحة (Response - 200 OK):
 ```json
 {
   "status": true,
@@ -63,20 +60,10 @@ Content-Type: application/json
     },
     {
       "id": 2,
-      "name": "خصم VIP 20%",
+      "name": "خصم ترويجي 50 جنيه",
       "raw_name": {
-        "ar": "خصم VIP 20%",
-        "en": "VIP 20%"
-      },
-      "type": "percentage",
-      "amount": 20.0
-    },
-    {
-      "id": 3,
-      "name": "خصم مباشر 50 جنيه",
-      "raw_name": {
-        "ar": "خصم مباشر 50 جنيه",
-        "en": "Flat 50 EGP Discount"
+        "ar": "خصم ترويجي 50 جنيه",
+        "en": "Promo 50 EGP"
       },
       "type": "value",
       "amount": 50.0
@@ -85,19 +72,11 @@ Content-Type: application/json
 }
 ```
 
-#### 📋 شرح حقول الخصم:
-- `id`: المعرف الرقمي للخصم (هو الذي يتم إرساله كـ `discount_id`).
-- `name`: اسم الخصم المترجم حسب لغة الطلب.
-- `type`: نوع الخصم:
-  - `"percentage"`: نسبة مئوية (مثل 10% أو 20%).
-  - `"value"`: قيمة نقدية ثابتة تخصم من سعر الصنف (مثل 50 جنيه).
-- `amount`: قيمة أو نسبة الخصم كـ `float`.
-
 ---
 
-## 2️⃣ تطبيق أو إلغاء الخصم على السلة (Apply / Clear Cart Discount)
+## 2️⃣ تطبيق أو إلغاء الخصم على السلة (Apply / Remove Cart Discount)
 
-تطبيق الخصم المختار على كافة العناصر الموجودة حالياً في السلة المحددة، وحفظه كنطاق نشط لأي عناصر ستضاف لاحقاً.
+تطبيق الخصم المختار على جميع عناصر السلة الحالية المحددة بالـ `module` و (`table_id` للصالة، أو `cashier_id` للسفري/الدليفري)، أو إرسال `null` لإلغاء الخصم.
 
 - **Method**: `POST`
 - **URL**: `/api/cashier/cart/apply-discount`
@@ -109,16 +88,14 @@ Content-Type: application/json
   ```
 
 ### 📥 معاملات جسم الطلب (Request Body Parameters):
-
 | الحقل (Field) | النوع | إجباري/اختياري | الوصف | مثال |
 |---|---|---|---|---|
 | `module` | string | **إجباري** | نوع الطلب: `takeaway` أو `dinein` أو `delivery` | `"dinein"` |
 | `table_id` | integer | **إجباري إذا كان `module = dinein`** | معرف الطاولة (أو استخدم `hall_table_id`) | `1` |
-| `hall_table_id` | integer | اختياري | بديل لـ `table_id` لطاولات الصالة | `1` |
-| **`discount_id`** | **integer أو null** | **اختياري (Nullable)** | **معرف الخصم المراد تطبيقه. إذا أردت إلغاء الخصم أرسل `null`** | **`1` أو `null`** |
-| `lang` | string | اختياري | لغة أسماء المنتجات والخيارات (`ar` أو `en`) | `"ar"` |
+| `discount_id` | integer أو null | **اختياري (Nullable)** | معرف الخصم المراد تطبيقه، أو `null` لإلغاء الخصم من السلة | `1` أو `null` |
+| `lang` | string | اختياري | لغة النصوص (`ar` أو `en`) | `"ar"` |
 
-### 🟢 نموذج طلب لتطبيق خصم 10% على طاولة رقم 1 (Apply Discount):
+### 🟢 نموذج طلب لتطبيق خصم (Request Body Example):
 ```json
 {
   "module": "dinein",
@@ -127,54 +104,7 @@ Content-Type: application/json
 }
 ```
 
-### 🟢 نموذج استجابة نجاح تطبيق الخصم (Response - 200 OK):
-```json
-{
-  "status": true,
-  "message": "تم تطبيق الخصم على السلة بنجاح",
-  "applied_discount_id": 1,
-  "data": [
-    {
-      "id": 15,
-      "module": "dinein",
-      "hall_table_id": 1,
-      "table_id": 1,
-      "quantity": 1,
-      "notes": null,
-      "discount_id": 1,
-      "discount": {
-        "id": 1,
-        "name": "خصم موظفين 10%",
-        "type": "percentage",
-        "amount": 10.0
-      },
-      "product": {
-        "id": 5,
-        "name": "برجر دجاج سوبر",
-        "price": 100.0,
-        "discount_val": 10.0,
-        "tax_val": 21.6,
-        "dinein_tax_val": 9.0,
-        "final_price": 111.6
-      },
-      "variations": [],
-      "addons": [],
-      "total_price": 100.0,
-      "total_discount": 10.0,
-      "total_tax": 21.6,
-      "total_final_price": 111.6
-    }
-  ],
-  "grand_totals": {
-    "grand_total_price": 100.0,
-    "grand_total_discount": 10.0,
-    "grand_total_tax": 21.6,
-    "grand_final_price": 111.6
-  }
-}
-```
-
-### 🟢 نموذج طلب لإلغاء وحذف الخصم من السلة (Clear Discount):
+### 🟢 نموذج طلب لإلغاء الخصم (Remove Discount Example):
 ```json
 {
   "module": "dinein",
@@ -182,13 +112,12 @@ Content-Type: application/json
   "discount_id": null
 }
 ```
-*يعيد السلة فوراً بالأسعار الطبيعية بدون أي خصم (`applied_discount_id: null`).*
 
 ---
 
-## 3️⃣ إضافة منتج للسلة والتوريث التلقائي للخصم (Add Item to Cart)
+## 3️⃣ إضافة منتج للسلة مع التوريث التلقائي وضريبة الصالة (Add Item to Cart)
 
-عند إضافة أي صنف جديد للسلة، يتعرف النظام تلقائياً على الخصم المطبق سابقاً على هذه السلة ويرثه مباشرة.
+عند إضافة صنف جديد للسلة، يتعرف النظام تلقائياً على الخصم النشط في هذه السلة ويرثه، كما يطبق نسبة ضريبة الصالة المسجلة في إعدادات النظام تلقائياً إذا كان `module = dinein`.
 
 - **Method**: `POST`
 - **URL**: `/api/cashier/cart`
@@ -204,13 +133,13 @@ Content-Type: application/json
 {
   "module": "dinein",
   "table_id": 1,
-  "product_id": 7,
+  "product_id": 5,
   "quantity": 2,
-  "notes": "بدون بصل",
+  "notes": "حار إضافي",
   "variations": [
     {
-      "variation_id": 3,
-      "option_ids": [10]
+      "variation_id": 1,
+      "option_ids": [3]
     }
   ],
   "addons": [
@@ -221,36 +150,42 @@ Content-Type: application/json
   "discount_id": null
 }
 ```
-> 💡 **ميزة التوريث التلقائي (Automatic Inheritance)**:
-> - ليس شرطاً إرسال `discount_id` في هذا الطلب!
-> - إذا كانت طاولة 1 مطبق عليها خصم (مثلاً 10%)، فالمنتج رقم 7 سيكتسب خصم الـ 10% تلقائياً، وتأتي الاستجابة `201 Created` متضمنة الخصم والحسابات المحاسبية الدقيقة له مباشرة.
-> - إذا أردت استثناء صنف معين من الخصم، يمكنك تمرير `discount_id: null` صراحةً.
+> 💡 **ملاحظة**: حقل `discount_id` اختياري. إذا كانت السلة مطبق عليها خصم مسبقاً، فسيرث الصنف الجديد الخصم تلقائياً حتى لو لم تقم بإرسال `discount_id`.
 
 ---
 
-## 4️⃣ استعراض عناصر السلة والإجماليات (Get Cart & Grand Totals)
+## 4️⃣ استعراض عناصر السلة والإجماليات المفصلة (Get Cart & Grand Totals)
+
+هنا يظهر التعديل المحاسبي بوضوح تام، حيث تم فصل كل مفتاح ضريبي بشكل مستقل:
 
 - **Method**: `GET`
 - **URL**: `/api/cashier/cart`
 - **Query Parameters**:
   - `module`: `takeaway` أو `dinein` أو `delivery` (إجباري).
-  - `table_id`: معرف الطاولة (إجباري في حالة الصالة `dinein`).
+  - `table_id`: معرف الطاولة (إجباري في حالة `dinein`).
   - `lang`: `ar` أو `en` (اختياري).
 
-### 🟢 هيكل الاستجابة وتفاصيل كل حقل محاسبي (Response Breakdown):
+### 🟢 نموذج استجابة سلة الصالة (Dine-in Cart Response - 200 OK):
 ```json
 {
   "status": true,
   "data": [
     {
-      "id": 18,
+      "id": 10,
       "module": "dinein",
       "hall_table_id": 1,
       "table_id": 1,
+      "captain_order_id": null,
+      "status": null,
       "quantity": 2,
-      "notes": "وسط",
+      "notes": "حار إضافي",
       "is_gift": false,
+      "parent_id": null,
+      "cashier_id": 1,
+      "cashier_man_id": 2,
+      "branch_id": 1,
       "discount_id": 1,
+      "dinein_tax": 10.0,
       "discount": {
         "id": 1,
         "name": "خصم موظفين 10%",
@@ -258,80 +193,123 @@ Content-Type: application/json
         "amount": 10.0
       },
       "product": {
-        "id": 4,
-        "name": "بيتزا دجاج باربيكيو",
-        "price": 150.0,
-        "discount_val": 15.0,
-        "tax_val": 32.4,
-        "dinein_tax_val": 13.5,
-        "final_price": 167.4
+        "id": 5,
+        "name": "برجر دجاج سوبر",
+        "description": "ساندوتش برجر مشوي مع الجبن",
+        "image": "products/burger.jpg",
+        "price": 100.0,
+        "discount_val": 10.0,
+        "tax_val": 12.6,
+        "dinein_tax_val": 9.0,
+        "final_price": 111.6
       },
       "variations": [],
       "addons": [],
-      "total_price": 300.0,
-      "total_discount": 30.0,
-      "total_tax": 64.8,
-      "total_final_price": 334.8
+      "total_price": 200.0,
+      "total_discount": 20.0,
+      "total_tax": 25.2,
+      "total_dinein_tax": 18.0,
+      "total_final_price": 223.2
     }
   ],
   "grand_totals": {
-    "grand_total_price": 300.0,
-    "grand_total_discount": 30.0,
-    "grand_total_tax": 64.8,
-    "grand_final_price": 334.8
+    "grand_total_price": 200.0,
+    "grand_total_discount": 20.0,
+    "grand_total_tax": 25.2,
+    "grand_total_dinein_tax": 18.0,
+    "grand_final_price": 223.2
   }
 }
 ```
 
 ---
 
-## 🧮 الدليل المحاسبي بالأرقام لمطور الفرونت إند (The Accounting Formula)
+## 🗂️ جدول مقارنة المفاتيح الضريبية (Tax Keys Dictionary)
 
-لتوضيح الحسابات بدقة تامة أمام المحاسبين والعملاء:
-
-### سيناريو تجريبي واقعي:
-- صنف سعره الأصلي: **100.00 جنيه**.
-- الكاشير اختار خصم سلة: **10%**.
-- الضريبة العامة للسلعة في المنيو (VAT): **14%**.
-- ضريبة الصالة المضبوطة في إعدادات الإدارة (`dinein_tax`): **10%**.
-
-### خطوات الاحتساب البرمجية:
-1. **قيمة الخصم (`discount_val`)**:
-   $$\text{Discount} = 100.00 \times 10\% = 10.00\text{ جنيه}$$
-2. **السعر بعد الخصم (`Price After Discount`)**:
-   $$\text{Price After Discount} = 100.00 - 10.00 = 90.00\text{ جنيه}$$
-3. **ضريبة القيمة المضافة (14% VAT على السعر بعد الخصم)**:
-   $$\text{Base Tax} = 90.00 \times 14\% = 12.60\text{ جنيه}$$
-4. **ضريبة الصالة (10% Dine-in Tax على السعر بعد الخصم)**:
-   $$\text{Dinein Tax} = 90.00 \times 10\% = 9.00\text{ جنيه}$$
-5. **إجمالي الضريبة للصنف (`tax_val`)**:
-   $$\text{Total Tax} = 12.60 + 9.00 = 21.60\text{ جنيه}$$
-6. **السعر النهائي للصنف (`final_price`)**:
-   $$\text{Final Price} = 100.00 - 10.00 + 21.60 = 111.60\text{ جنيه}$$
-7. **إجمالي عنصر السلة لكمية 2 (`quantity = 2`)**:
-   - `total_price`: $100.00 \times 2 = 200.00\text{ جنيه}$
-   - `total_discount`: $10.00 \times 2 = 20.00\text{ جنيه}$
-   - `total_tax`: $21.60 \times 2 = 43.20\text{ جنيه}$
-   - `total_final_price`: $111.60 \times 2 = 223.20\text{ جنيه}$
-
-#### التحقق الرياضي الدقيق:
-$$\text{Total (200.00)} - \text{Discount (20.00)} + \text{Tax (43.20)} = 223.20\text{ جنيه} \equiv \text{Final Price}$$
+| المفتاح (Key) | المستوى | الوصف | مثال |
+|---|---|---|---|
+| `dinein_tax` | عنصر السلة | النسبة المئوية المطبقة لضريبة الصالة المسجلة في قاعدة البيانات | `10.0` (أي 10%) |
+| `product.tax_val` | الصنف | قيمة الضريبة الأساسية فقط للقطعة الواحدة (مثل 14% VAT) **دون جمع ضريبة الصالة** | `12.60` |
+| `product.dinein_tax_val` | الصنف | **مفتاح مستقل**: قيمة ضريبة الصالة فقط للقطعة الواحدة | `9.00` |
+| `product.final_price` | الصنف | السعر النهائي الشامل للقطعة: $\text{Price} - \text{Discount} + \text{Tax} + \text{DineinTax}$ | `111.60` |
+| `total_tax` | بند السلة | إجمالي الضريبة الأساسية للصنف: $\text{product.tax\_val} \times \text{quantity}$ | `25.20` |
+| **`total_dinein_tax`** | بند السلة | **مفتاح مستقل جديد**: إجمالي ضريبة الصالة للصنف: $\text{product.dinein\_tax\_val} \times \text{quantity}$ | `18.00` |
+| `total_final_price` | بند السلة | الإجمالي النهائي المطلوب للبند بالكامل | `223.20` |
+| `grand_total_tax` | الإجماليات العامة | مجموع الضرائب الأساسية فقط لكافة أصناف السلة | `25.20` |
+| **`grand_total_dinein_tax`** | الإجماليات العامة | **مفتاح مستقل جديد**: مجموع ضريبة الصالة لكافة أصناف السلة | `18.00` |
+| `grand_final_price` | الإجماليات العامة | الإجمالي النهائي الكلي المطلوب دفعه للفاتورة | `223.20` |
 
 ---
 
-## 🖥️ إرشادات تصميم واجهة المستخدم لشاشة الكاشير (Frontend UI Recommendations)
+## 5️⃣ إنشاء الطلب والفاتورة النهائية (Checkout / Order Placement)
 
-1. **زر اختيار الخصم (Discount Action Button)**:
-   - ضع زراً في شاشة الـ POS باسم **"تطبيق خصم"** أو أيقونة نسبة `%`.
-   - عند الضغط عليه، يتم استدعاء `GET /api/cashier/cart/discounts` وفتح Modal يعرض الخصومات المتاحة.
-   - عند اختيار خصم، يتم إرسال `POST /api/cashier/cart/apply-discount` بالـ `discount_id`.
-2. **شريط حالة الخصم المطبق (Applied Discount Badge)**:
-   - في ملخص السلة، إذا كانت السلة تحتوي على خصم مطبق، اعرض شارة (Badge) بلون مميز مثل:
-     `[ خصم موظفين 10%  (✕) ]`
-   - عند ضغط زر `(✕)`، يتم إرسال `POST /api/cashier/cart/apply-discount` مع `discount_id: null` لإلغاء الخصم فوراً.
-3. **تفصيل الفاتورة وشاشة الدفع (Checkout & Bill Breakdown)**:
-   اعرض الملخص بالشكل المالي القياسي:
-   - **المجموع الفرعي (Subtotal)**: يعرض `grand_totals.grand_total_price`.
-   - **الخصم (Discount)**: يعرض `- grand_totals.grand_total_discount` بلون أخضر أو أحمر.
-   - **الضريبة (Taxes & Service)**: يعرض `grand_totals.grand_total_tax`.
-   - **الإجمالي النهائي المطلوب (Net Total)**: يعرض `grand_totals.grand_final_price` بخط عريض وواضح.
+عند إتمام الطلب من قِبل الكاشير (`POST /api/cashier/orders/checkout`)، يتم حفظ ضريبة الصالة في عمود مستقل في جدول `orders` أيضاً:
+
+- **Method**: `POST`
+- **URL**: `/api/cashier/orders/checkout`
+- **Response**: يحتوي كائن الطلب في الـ Resource على المفاتيح التالية:
+  ```json
+  {
+    "status": true,
+    "data": {
+      "id": 85,
+      "code": "ORD-20261103-001",
+      "module": "dinein",
+      "total": 200.0,
+      "total_discount": 20.0,
+      "total_tax": 25.2,
+      "total_dinein_tax": 18.0,
+      "final_price": 223.2
+    }
+  }
+  ```
+
+---
+
+## 🧮 الدليل المحاسبي بالأرقام لمطور الفرونت إند (The Mathematical Proof)
+
+### سيناريو تجريبي واقعي:
+- **سعر الصنف الأصلي**: `100.00` جنيه.
+- **الكمية**: `2`.
+- **خصم السلة المطبق**: `10%`.
+- **الضريبة الأساسية للسلعة (14% VAT)**: معرفة على الصنف في المنيو.
+- **ضريبة الصالة (`dinein_tax`)**: `10%`.
+
+### خطوات الحساب البرمجية:
+1. **الخصم للقطعة**:
+   $$\text{DiscountVal} = 100.00 \times 10\% = 10.00\text{ جنيه}$$
+2. **السعر بعد الخصم**:
+   $$\text{PriceAfterDiscount} = 100.00 - 10.00 = 90.00\text{ جنيه}$$
+3. **الضريبة الأساسية للقطعة (`tax_val`)**:
+   $$\text{tax\_val} = 90.00 \times 14\% = 12.60\text{ جنيه}$$
+4. **ضريبة الصالة للقطعة (`dinein_tax_val`)** *(مفتاح مستقل)*:
+   $$\text{dinein\_tax\_val} = 90.00 \times 10\% = 9.00\text{ جنيه}$$
+5. **السعر النهائي للقطعة (`final_price`)**:
+   $$\text{final\_price} = 100.00 - 10.00 + 12.60 + 9.00 = 111.60\text{ جنيه}$$
+6. **إجمالي البند لكمية 2 (`quantity = 2`)**:
+   - `total_price` = $100.00 \times 2 = 200.00$
+   - `total_discount` = $10.00 \times 2 = 20.00$
+   - `total_tax` = $12.60 \times 2 = 25.20$ *(الضريبة الأساسية فقط)*
+   - `total_dinein_tax` = $9.00 \times 2 = 18.00$ *(ضريبة الصالة المستقلة)*
+   - `total_final_price` = $111.60 \times 2 = 223.20$
+
+### المعادلة المحاسبية المطابقة 100%:
+$$\text{total\_price (200.00)} - \text{total\_discount (20.00)} + \text{total\_tax (25.20)} + \text{total\_dinein\_tax (18.00)} = 223.20 \equiv \text{total\_final\_price}$$
+
+---
+
+## 🖥️ نصائح عرض الشاشة والإيصال لمطور الفرونت إند (UI Display Guide)
+
+في شاشة الـ POS وفي قالب طباعة الإيصال (Receipt Template)، اعرض ملخص الحساب بالصورة القياسية التالية:
+
+```text
+----------------------------------------
+المجموع الفرعي (Subtotal):      200.00 EGP
+الخصم (Discount - 10%):        - 20.00 EGP
+ضريبة القيمة المضافة (VAT 14%): + 25.20 EGP
+ضريبة الصالة (Dine-in 10%):     + 18.00 EGP
+----------------------------------------
+الإجمالي الكلي (Net Total):     223.20 EGP
+----------------------------------------
+```
+- إذا كان نوع الطلب سفري (`takeaway`) أو دليفري (`delivery`)، ستكون قيمة `total_dinein_tax` و `grand_total_dinein_tax` تساوي `0.00` تلقائياً، وبالتالي يمكنك إخفاء سطر ضريبة الصالة في واجهة المستخدم لغير طلبات الصالة.

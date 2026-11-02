@@ -84,6 +84,7 @@ class CashierCartController extends Controller
                     'grand_total_price' => 0.00,
                     'grand_total_discount' => 0.00,
                     'grand_total_tax' => 0.00,
+                    'grand_total_dinein_tax' => 0.00,
                     'grand_final_price' => 0.00,
                 ],
             ], 400);
@@ -138,6 +139,7 @@ class CashierCartController extends Controller
                     'grand_total_price' => 0.00,
                     'grand_total_discount' => 0.00,
                     'grand_total_tax' => 0.00,
+                    'grand_total_dinein_tax' => 0.00,
                     'grand_final_price' => 0.00,
                 ],
             ]);
@@ -376,11 +378,16 @@ class CashierCartController extends Controller
             Cache::put($scopeKey, $discountId, now()->addHours(12));
         }
 
-        $cart = DB::transaction(function () use ($validated, $tableId, $cashierId, $branchId, $hasGift, $priceGift, $discountId): OrderCart {
+        $cartDineinTax = ($validated['module'] === 'dinein')
+            ? (float) ($businessSetup?->dinein_tax ?? 0.0)
+            : 0.0;
+
+        $cart = DB::transaction(function () use ($validated, $tableId, $cashierId, $branchId, $hasGift, $priceGift, $discountId, $cartDineinTax): OrderCart {
             $cart = OrderCart::create([
                 'module' => $validated['module'],
                 'product_id' => $validated['product_id'],
                 'discount_id' => $discountId,
+                'dinein_tax' => $cartDineinTax,
                 'cashier_id' => $cashierId,
                 'cashier_man_id' => auth()->id(),
                 'branch_id' => $branchId,
@@ -417,6 +424,7 @@ class CashierCartController extends Controller
                     'quantity' => $validated['quantity'] ?? 1,
                     'notes' => $validated['notes'] ?? null,
                     'price' => $priceGift,
+                    'dinein_tax' => $cartDineinTax,
                     'is_gift' => true,
                     'parent_id' => $cart->id,
                 ]);

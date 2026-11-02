@@ -2,7 +2,6 @@
 
 namespace App\Http\Resources;
 
-use App\Services\QrCodeService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -36,7 +35,7 @@ class OrderResource extends JsonResource
         }
 
         return [
-            'id' => $this->id, 
+            'id' => $this->id,
             'shift_id' => $this->shift_id,
             'shift_name' => $localizedShiftName,
             'cashier_id' => $this->cashier_id,
@@ -66,6 +65,7 @@ class OrderResource extends JsonResource
             'status' => $this->status,
             'total' => (float) $this->total,
             'total_tax' => (float) $this->total_tax,
+            'total_dinein_tax' => (float) ($this->total_dinein_tax ?? 0),
             'total_discount' => (float) $this->total_discount,
             'final_price' => (float) $this->final_price,
             'branch' => new BranchResource($this->whenLoaded('branch')),

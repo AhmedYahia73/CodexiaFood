@@ -36,6 +36,7 @@ class Order extends Model
         'status',
         'total',
         'total_tax',
+        'total_dinein_tax',
         'total_discount',
         'final_price',
     ];
@@ -49,6 +50,7 @@ class Order extends Model
             'lng' => 'float',
             'total' => 'decimal:2',
             'total_tax' => 'decimal:2',
+            'total_dinein_tax' => 'decimal:2',
             'total_discount' => 'decimal:2',
             'final_price' => 'decimal:2',
         ];

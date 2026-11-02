@@ -18,6 +18,7 @@ class OrderCart extends Model
         'module',
         'product_id',
         'discount_id',
+        'dinein_tax',
         'cashier_id',
         'cashier_man_id',
         'branch_id',
@@ -37,6 +38,7 @@ class OrderCart extends Model
         return [
             'quantity' => 'integer',
             'price' => 'decimal:2',
+            'dinein_tax' => 'double',
             'is_gift' => 'boolean',
         ];
     }

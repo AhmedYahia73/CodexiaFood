@@ -481,6 +481,7 @@ class CashierOrderController extends Controller
                 'total' => $grandTotals['grand_total_price'],
                 'total_discount' => $grandTotals['grand_total_discount'],
                 'total_tax' => $grandTotals['grand_total_tax'],
+                'total_dinein_tax' => $grandTotals['grand_total_dinein_tax'] ?? 0.00,
                 'final_price' => $grandTotals['grand_final_price'],
             ]);
 

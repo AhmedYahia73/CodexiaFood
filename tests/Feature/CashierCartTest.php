@@ -215,10 +215,9 @@ test('dinein_tax from business setup is applied as percentage on products when m
 
     // 1. Add dinein cart item:
     // Product price = 100, discount 20% = 20, price after discount = 80
-    // Base tax 14% on (80) = 11.20
-    // Dinein tax 10% on (80) = 8.00
-    // Total product tax = 11.20 + 8.00 = 19.20
-    // Final product price = 80 + 19.20 = 99.20
+    // Base tax 14% on (80) = 11.20 (kept in tax_val and total_tax independently)
+    // Dinein tax 10% on (80) = 8.00 (kept in dinein_tax_val and total_dinein_tax independently)
+    // Final product price = 80 + 11.20 + 8.00 = 99.20
     $dineinRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/cart', [
             'module' => 'dinein',
@@ -228,11 +227,21 @@ test('dinein_tax from business setup is applied as percentage on products when m
         ])
         ->assertStatus(201);
 
-    expect((float) $dineinRes->json('data.product.tax_val'))->toBe(19.2)
+    expect((float) $dineinRes->json('data.product.tax_val'))->toBe(11.2)
         ->and((float) $dineinRes->json('data.product.dinein_tax_val'))->toBe(8.0)
         ->and((float) $dineinRes->json('data.product.final_price'))->toBe(99.2)
-        ->and((float) $dineinRes->json('data.total_tax'))->toBe(19.2)
+        ->and((float) $dineinRes->json('data.total_tax'))->toBe(11.2)
+        ->and((float) $dineinRes->json('data.total_dinein_tax'))->toBe(8.0)
         ->and((float) $dineinRes->json('data.total_final_price'))->toBe(99.2);
+
+    // Also verify cart index grand totals separation
+    $indexRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id)
+        ->assertStatus(200);
+
+    expect((float) $indexRes->json('grand_totals.grand_total_tax'))->toBe(11.2)
+        ->and((float) $indexRes->json('grand_totals.grand_total_dinein_tax'))->toBe(8.0)
+        ->and((float) $indexRes->json('grand_totals.grand_final_price'))->toBe(99.2);
 
     // 2. Add takeaway cart item with same product:
     // Dinein tax must NOT be applied to takeaway

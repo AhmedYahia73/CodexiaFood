@@ -68,10 +68,9 @@ class PriceCalculatorService
         $dineinTaxVal = 0.00;
         if ($dineinTaxPercent > 0) {
             $dineinTaxVal = round($priceAfterDiscount * ($dineinTaxPercent / 100), 2);
-            $taxVal = round($taxVal + $dineinTaxVal, 2);
         }
 
-        $finalPrice = round($price - $discountVal + $taxVal, 2);
+        $finalPrice = round($price - $discountVal + $taxVal + $dineinTaxVal, 2);
 
         return [
             'price' => $price,
@@ -168,7 +167,7 @@ class PriceCalculatorService
         $effectiveDiscount = $cart->discount ?? $product->discount;
 
         $dineinTaxRate = ($cart->module === 'dinein')
-            ? ($dineinTax ?? $this->getDineinTax())
+            ? ($dineinTax ?? ($cart->dinein_tax > 0 ? (float) $cart->dinein_tax : $this->getDineinTax()))
             : 0.0;
 
         if ($isGift) {
@@ -284,11 +283,13 @@ class PriceCalculatorService
         $unitPrice = $productPricing['price'] + $sumOptionsPrice + $sumAddonsPrice;
         $unitDiscount = $productPricing['discount_val'] + $sumOptionsDiscount + $sumAddonsDiscount;
         $unitTax = $productPricing['tax_val'] + $sumOptionsTax + $sumAddonsTax;
+        $unitDineinTax = $productPricing['dinein_tax_val'] ?? 0.00;
         $unitFinal = $productPricing['final_price'] + $sumOptionsFinal + $sumAddonsFinal;
 
         $totalPrice = round($unitPrice * $qty, 2);
         $totalDiscount = round($unitDiscount * $qty, 2);
         $totalTax = round($unitTax * $qty, 2);
+        $totalDineinTax = round($unitDineinTax * $qty, 2);
         $totalFinalPrice = round($unitFinal * $qty, 2);
 
         $prodName = is_array($product->name)
@@ -314,6 +315,7 @@ class PriceCalculatorService
             'cashier_man_id' => $cart->cashier_man_id,
             'branch_id' => $cart->branch_id,
             'discount_id' => $cart->discount_id,
+            'dinein_tax' => (float) ($cart->dinein_tax ?? $dineinTaxRate),
             'discount' => $effectiveDiscount ? [
                 'id' => $effectiveDiscount->id,
                 'name' => is_array($effectiveDiscount->name)
@@ -338,6 +340,7 @@ class PriceCalculatorService
             'total_price' => $totalPrice,
             'total_discount' => $totalDiscount,
             'total_tax' => $totalTax,
+            'total_dinein_tax' => $totalDineinTax,
             'total_final_price' => $totalFinalPrice,
         ];
     }
@@ -346,19 +349,21 @@ class PriceCalculatorService
      * Calculate grand totals from an array of calculated cart items.
      *
      * @param  array<int, array<string, mixed>>  $calculatedItems
-     * @return array{grand_total_price: float, grand_total_discount: float, grand_total_tax: float, grand_final_price: float}
+     * @return array{grand_total_price: float, grand_total_discount: float, grand_total_tax: float, grand_total_dinein_tax: float, grand_final_price: float}
      */
     public function calculateGrandTotals(array $calculatedItems): array
     {
         $grandTotalPrice = 0.00;
         $grandTotalDiscount = 0.00;
         $grandTotalTax = 0.00;
+        $grandTotalDineinTax = 0.00;
         $grandFinalPrice = 0.00;
 
         foreach ($calculatedItems as $item) {
             $grandTotalPrice += (float) ($item['total_price'] ?? 0);
             $grandTotalDiscount += (float) ($item['total_discount'] ?? 0);
             $grandTotalTax += (float) ($item['total_tax'] ?? 0);
+            $grandTotalDineinTax += (float) ($item['total_dinein_tax'] ?? 0);
             $grandFinalPrice += (float) ($item['total_final_price'] ?? 0);
         }
 
@@ -366,6 +371,7 @@ class PriceCalculatorService
             'grand_total_price' => round($grandTotalPrice, 2),
             'grand_total_discount' => round($grandTotalDiscount, 2),
             'grand_total_tax' => round($grandTotalTax, 2),
+            'grand_total_dinein_tax' => round($grandTotalDineinTax, 2),
             'grand_final_price' => round($grandFinalPrice, 2),
         ];
     }
