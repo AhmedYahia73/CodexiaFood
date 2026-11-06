@@ -4,10 +4,8 @@ namespace App\Http\Controllers\api\admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductResource;
-use App\Models\Category;
-use App\Models\Discount;
 use App\Models\Product;
-use App\Models\Tax;
+use App\Services\ProductManufacturingService;
 use App\trait\image;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,9 +32,54 @@ class ProductController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $products = Product::with(['tax', 'discount', 'category', 'subCategory', 'variations.options'])
-            ->latest()
-            ->paginate($request->get('per_page', 15));
+        $validated = $request->validate([
+            /**
+             * Current page number.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'page' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Items per page.
+             *
+             * @var int|null
+             *
+             * @example 15
+             */
+            'per_page' => 'sometimes|nullable|integer|min:1',
+
+            /**
+             * Filter by specific product ID. When filtered by ID, manufacturing recipes are included.
+             *
+             * @var int|null
+             *
+             * @example 1
+             */
+            'id' => 'sometimes|nullable|integer|exists:products,id',
+
+            /**
+             * Whether to include manufacturing recipes in product list.
+             *
+             * @var bool|null
+             *
+             * @example false
+             */
+            'include_recipes' => 'sometimes|nullable|boolean',
+        ]);
+
+        $includeRecipes = ! empty($validated['id']) || $request->boolean('include_recipes');
+
+        $query = Product::with(ProductManufacturingService::eagerLoadRelations($includeRecipes));
+
+        if (! empty($validated['id'])) {
+            $query->where('id', $validated['id']);
+        }
+
+        $perPage = (int) ($validated['per_page'] ?? $request->get('per_page', 15));
+        $products = $query->latest()->paginate($perPage);
 
         return ProductResource::collection($products)->additional([
             'select_options' => $this->getSelectOptions(),
@@ -65,6 +108,7 @@ class ProductController extends Controller
             'discount_id' => 'nullable|exists:discounts,id',
             'category_id' => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:categories,id',
+            'kitchen_id' => 'nullable|exists:kitchens,id',
             'variations' => 'nullable|array',
             'variations.*.name' => 'required|array:en,ar',
             'variations.*.name.en' => 'required|string|max:255',
@@ -77,13 +121,24 @@ class ProductController extends Controller
             'variations.*.options.*.name.ar' => 'required|string|max:255',
             'variations.*.options.*.price' => 'nullable|numeric|min:0',
             'variations.*.options.*.status' => 'nullable|boolean',
+
+            /**
+             * Manufacturing recipes / ingredients specification list.
+             *
+             * @var array|null
+             */
+            'recipes' => 'nullable|array',
+            'recipes.*.material_id' => 'nullable|exists:materials,id|required_without:recipes.*.product_recipe_id',
+            'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
+            'recipes.*.count' => 'required_with:recipes|integer|min:1',
+            'recipes.*.unit_id' => 'required_with:recipes|integer|exists:units,id',
         ]);
 
         $imagePath = $request->hasFile('image')
             ? $this->upload($request, 'image', 'products')
             : $request->input('image');
 
-        $product = DB::transaction(function () use ($validated, $imagePath) {
+        $product = DB::transaction(function () use ($validated, $imagePath, $request) {
             $product = Product::create([
                 'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
@@ -93,6 +148,7 @@ class ProductController extends Controller
                 'discount_id' => $validated['discount_id'] ?? null,
                 'category_id' => $validated['category_id'] ?? null,
                 'sub_category_id' => $validated['sub_category_id'] ?? null,
+                'kitchen_id' => $validated['kitchen_id'] ?? null,
             ]);
 
             if (! empty($validated['variations'])) {
@@ -116,13 +172,19 @@ class ProductController extends Controller
                 }
             }
 
+            if ($request->has('recipes')) {
+                ProductManufacturingService::syncForProduct($product, $validated['recipes'] ?? []);
+            }
+
             return $product;
         });
+
+        $product->load(ProductManufacturingService::eagerLoadRelations(true));
 
         return response()->json([
             'status' => true,
             'message' => 'Product created successfully.',
-            'data' => new ProductResource($product->load(['tax', 'discount', 'category', 'subCategory', 'variations.options'])),
+            'data' => new ProductResource($product),
             'select_options' => $this->getSelectOptions(),
         ], 201);
     }
@@ -132,9 +194,11 @@ class ProductController extends Controller
      */
     public function show(Product $product): JsonResponse
     {
+        $product->load(ProductManufacturingService::eagerLoadRelations(true));
+
         return response()->json([
             'status' => true,
-            'data' => new ProductResource($product->load(['tax', 'discount', 'category', 'subCategory', 'variations.options'])),
+            'data' => new ProductResource($product),
             'select_options' => $this->getSelectOptions(),
         ]);
     }
@@ -161,6 +225,7 @@ class ProductController extends Controller
             'discount_id' => 'nullable|exists:discounts,id',
             'category_id' => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:categories,id',
+            'kitchen_id' => 'nullable|exists:kitchens,id',
             'variations' => 'nullable|array',
             'variations.*.name' => 'required|array:en,ar',
             'variations.*.name.en' => 'required|string|max:255',
@@ -173,6 +238,17 @@ class ProductController extends Controller
             'variations.*.options.*.name.ar' => 'required|string|max:255',
             'variations.*.options.*.price' => 'nullable|numeric|min:0',
             'variations.*.options.*.status' => 'nullable|boolean',
+
+            /**
+             * Manufacturing recipes / ingredients specification list.
+             *
+             * @var array|null
+             */
+            'recipes' => 'nullable|array',
+            'recipes.*.material_id' => 'nullable|exists:materials,id|required_without:recipes.*.product_recipe_id',
+            'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
+            'recipes.*.count' => 'required_with:recipes|integer|min:1',
+            'recipes.*.unit_id' => 'required_with:recipes|integer|exists:units,id',
         ]);
 
         DB::transaction(function () use ($request, $validated, $product) {
@@ -198,6 +274,9 @@ class ProductController extends Controller
             }
             if ($request->has('sub_category_id')) {
                 $productData['sub_category_id'] = $validated['sub_category_id'] ?? null;
+            }
+            if ($request->has('kitchen_id')) {
+                $productData['kitchen_id'] = $validated['kitchen_id'] ?? null;
             }
 
             if ($request->hasFile('image')) {
@@ -238,12 +317,18 @@ class ProductController extends Controller
                     }
                 }
             }
+
+            if ($request->has('recipes')) {
+                ProductManufacturingService::syncForProduct($product, $validated['recipes'] ?? []);
+            }
         });
+
+        $product->load(ProductManufacturingService::eagerLoadRelations(true));
 
         return response()->json([
             'status' => true,
             'message' => 'Product updated successfully.',
-            'data' => new ProductResource($product->fresh(['tax', 'discount', 'category', 'subCategory', 'variations.options'])),
+            'data' => new ProductResource($product),
             'select_options' => $this->getSelectOptions(),
         ]);
     }
@@ -256,6 +341,8 @@ class ProductController extends Controller
         if ($product->image) {
             $this->deleteImage($product->image);
         }
+
+        ProductManufacturingService::deleteForProduct($product);
 
         $product->delete();
 
@@ -270,12 +357,7 @@ class ProductController extends Controller
      */
     private function getSelectOptions(): array
     {
-        return [
-            'tax' => Tax::select('id', 'name', 'type', 'amount')->get(),
-            'discount' => Discount::select('id', 'name', 'type', 'amount')->get(),
-            'parent_categories' => Category::whereNull('category_id')->select('id', 'name', 'type')->get(),
-            'sub_categories' => Category::whereNotNull('category_id')->select('id', 'name', 'category_id', 'type')->get(),
-        ];
+        return ProductManufacturingService::getSelectOptions();
     }
 
     /**
@@ -339,6 +421,19 @@ class ProductController extends Controller
                     }
                 }
                 $dataToMerge['variations'] = $variations;
+            }
+        }
+
+        if ($request->has('recipes')) {
+            $recipes = $request->input('recipes');
+            if (is_string($recipes)) {
+                $decoded = json_decode($recipes, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $recipes = $decoded;
+                }
+            }
+            if (is_array($recipes)) {
+                $dataToMerge['recipes'] = $recipes;
             }
         }
 

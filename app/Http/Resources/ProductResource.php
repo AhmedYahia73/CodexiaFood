@@ -38,6 +38,16 @@ class ProductResource extends JsonResource
             'sub_category_id' => $this->sub_category_id,
             'sub_category' => new CategoryResource($this->whenLoaded('subCategory')),
             'variations' => VariationResource::collection($this->whenLoaded('variations')),
+            'product_manufacturing' => $this->when(
+                $this->relationLoaded('productManufacturing'),
+                fn () => $this->productManufacturing ? new ProductManufacturingResource($this->productManufacturing) : null
+            ),
+            'recipes' => $this->when(
+                $this->relationLoaded('productManufacturing'),
+                fn () => $this->productManufacturing && $this->productManufacturing->relationLoaded('productRecipeManufacturings')
+                    ? ProductRecipeManufacturingResource::collection($this->productManufacturing->productRecipeManufacturings)
+                    : []
+            ),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
