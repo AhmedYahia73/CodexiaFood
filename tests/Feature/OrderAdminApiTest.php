@@ -376,3 +376,32 @@ test('admin can paginate orders and change pages successfully', function () {
     $posPage2Ids = collect($posPage2->json('data'))->pluck('id')->all();
     expect($posPage2Ids)->toBe($page2Ids);
 });
+
+test('order resource contains 12 hour time, am_pm, date and order module', function () {
+    $order = Order::create([
+        'branch_id' => $this->branch->id,
+        'shift_id' => $this->shift->id,
+        'module' => 'delivery',
+        'status' => 'preparing',
+        'total' => 100,
+        'final_price' => 100,
+    ]);
+
+    $response = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson("/api/admin/orders/{$order->id}")
+        ->assertStatus(200);
+
+    $data = $response->json('data');
+    expect($data['module'])->toBe('delivery')
+        ->and($data['order_module'])->toBe('delivery')
+        ->and($data['date'])->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and($data['time'])->toMatch('/^\d{2}:\d{2} (AM|PM)$/')
+        ->and($data['time_12'])->toMatch('/^\d{2}:\d{2}$/')
+        ->and(in_array($data['am_pm'], ['am', 'pm'], true))->toBeTrue()
+        ->and(in_array($data['period'], ['AM', 'PM'], true))->toBeTrue()
+        ->and($data['order_date'])->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and($data['order_time'])->toMatch('/^\d{2}:\d{2} (AM|PM)$/')
+        ->and($data['order_time_12'])->toMatch('/^\d{2}:\d{2}$/')
+        ->and(in_array($data['order_am_pm'], ['am', 'pm'], true))->toBeTrue()
+        ->and(in_array($data['order_period'], ['AM', 'PM'], true))->toBeTrue();
+});

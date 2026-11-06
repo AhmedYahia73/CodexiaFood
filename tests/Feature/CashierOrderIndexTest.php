@@ -3,6 +3,8 @@
 use App\Models\Branch;
 use App\Models\Cashier;
 use App\Models\CashierMan;
+use App\Models\Hall;
+use App\Models\HallTable;
 use App\Models\Order;
 use App\Models\StartShift;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -216,4 +218,90 @@ test('cashier can filter orders by search with customer name or phone', function
     $dataDirectId = $responseDirectId->json('data');
     expect(count($dataDirectId))->toBe(1);
     expect($dataDirectId[0]['id'])->toBe($order1->id);
+});
+
+test('cashier can filter orders by paid true or false query', function () {
+    $paidOrder = Order::create([
+        'shift_id' => $this->shift->id,
+        'cashier_id' => $this->cashier->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'module' => 'takeaway',
+        'paid' => true,
+        'total' => 100,
+        'final_price' => 100,
+    ]);
+
+    $unpaidOrder = Order::create([
+        'shift_id' => $this->shift->id,
+        'cashier_id' => $this->cashier->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'module' => 'delivery',
+        'paid' => false,
+        'total' => 150,
+        'final_price' => 150,
+    ]);
+
+    // Query paid=true
+    $paidResponse = $this->withHeader('Authorization', "Bearer {$this->token}")
+        ->getJson('/api/cashier/orders?paid=true')
+        ->assertOk();
+
+    $paidData = $paidResponse->json('data');
+    expect(collect($paidData)->pluck('id')->all())->toContain($paidOrder->id)
+        ->and(collect($paidData)->pluck('id')->all())->not->toContain($unpaidOrder->id);
+
+    // Query paid=false
+    $unpaidResponse = $this->withHeader('Authorization', "Bearer {$this->token}")
+        ->getJson('/api/cashier/orders?paid=false')
+        ->assertOk();
+
+    $unpaidData = $unpaidResponse->json('data');
+    expect(collect($unpaidData)->pluck('id')->all())->toContain($unpaidOrder->id)
+        ->and(collect($unpaidData)->pluck('id')->all())->not->toContain($paidOrder->id);
+});
+
+test('cashier orders include table name and hall name for dine in orders along with 12h time and date', function () {
+    $hall = Hall::create([
+        'name' => ['ar' => 'صالة الـ VIP', 'en' => 'VIP Hall'],
+        'branch_id' => $this->branch->id,
+        'status' => true,
+    ]);
+
+    $table = HallTable::create([
+        'name' => 'طاولة 5',
+        'hall_id' => $hall->id,
+        'branch_id' => $this->branch->id,
+        'status' => true,
+    ]);
+
+    $dineinOrder = Order::create([
+        'shift_id' => $this->shift->id,
+        'cashier_id' => $this->cashier->id,
+        'cashier_man_id' => $this->cashierMan->id,
+        'hall_table_id' => $table->id,
+        'module' => 'dinein',
+        'paid' => true,
+        'total' => 300,
+        'final_price' => 300,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->token}")
+        ->getJson('/api/cashier/orders?module=dinein&lang=ar')
+        ->assertOk();
+
+    $orderData = $response->json('data.0');
+    expect($orderData['id'])->toBe($dineinOrder->id)
+        ->and($orderData['table_name'])->toBe('طاولة 5')
+        ->and($orderData['hall_table_name'])->toBe('طاولة 5')
+        ->and($orderData['hall_name'])->toBe('صالة الـ VIP')
+        ->and($orderData['table']['name'])->toBe('طاولة 5')
+        ->and($orderData['table']['hall_name'])->toBe('صالة الـ VIP')
+        ->and($orderData['hall_table']['name'])->toBe('طاولة 5')
+        ->and($orderData['hall_table']['hall_name'])->toBe('صالة الـ VIP')
+        ->and($orderData['date'])->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and($orderData['time'])->toMatch('/^\d{2}:\d{2} (AM|PM)$/')
+        ->and($orderData['time_12'])->toMatch('/^\d{2}:\d{2}$/')
+        ->and(in_array($orderData['am_pm'], ['am', 'pm'], true))->toBeTrue()
+        ->and(in_array($orderData['period'], ['AM', 'PM'], true))->toBeTrue()
+        ->and($orderData['created_at'])->not->toBeNull();
 });

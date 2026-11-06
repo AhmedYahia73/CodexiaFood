@@ -41,7 +41,7 @@ class OrderController extends Controller
             'shift',
             'cashier',
             'cashierMan',
-            'hallTable',
+            'hallTable.hall',
             'financialAccount',
             'delivery',
             'paymentMethod',
@@ -127,6 +127,15 @@ class OrderController extends Controller
              * @example "delivery"
              */
             'module' => 'sometimes|nullable|string|in:takeaway,dinein,delivery',
+
+            /**
+             * Filter by paid status (true or false).
+             *
+             * @var bool|null
+             *
+             * @example true
+             */
+            'paid' => 'sometimes|nullable',
 
             /**
              * Specific business date filter (YYYY-MM-DD) or 'all' for full history.
@@ -247,6 +256,13 @@ class OrderController extends Controller
 
         if ($request->filled('module') && ! in_array($request->query('module'), ['all', 'undefined', 'null'], true)) {
             $query->where('module', $request->query('module'));
+        }
+
+        if ($request->filled('paid') && ! in_array($request->query('paid'), ['all', 'undefined', 'null'], true)) {
+            $isPaid = filter_var($request->query('paid'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($isPaid !== null) {
+                $query->where('paid', $isPaid);
+            }
         }
 
         $this->applyDateFilters($query, $request);

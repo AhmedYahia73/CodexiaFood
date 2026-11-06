@@ -107,6 +107,24 @@ class CashierOrderController extends Controller
             'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
 
             /**
+             * Filter by paid status (true or false).
+             *
+             * @var bool|null
+             *
+             * @example true
+             */
+            'paid' => 'sometimes|nullable',
+
+            /**
+             * Response language code (ar or en).
+             *
+             * @var string|null
+             *
+             * @example ar
+             */
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+
+            /**
              * Number of items per page.
              *
              * @var int
@@ -131,7 +149,7 @@ class CashierOrderController extends Controller
             'shift',
             'cashier',
             'cashierMan',
-            'hallTable',
+            'hallTable.hall',
             'financialAccount',
             'delivery',
             'paymentMethod',
@@ -145,6 +163,11 @@ class CashierOrderController extends Controller
 
         if (! empty($validated['module'])) {
             $query->where('module', $validated['module']);
+        }
+
+        if (array_key_exists('paid', $validated) && $validated['paid'] !== null && $validated['paid'] !== '') {
+            $isPaid = filter_var($validated['paid'], FILTER_VALIDATE_BOOLEAN);
+            $query->where('paid', $isPaid);
         }
 
         $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
@@ -204,7 +227,7 @@ class CashierOrderController extends Controller
             'shift',
             'cashier',
             'cashierMan',
-            'hallTable',
+            'hallTable.hall',
             'financialAccount',
             'delivery',
             'paymentMethod',
@@ -346,6 +369,18 @@ class CashierOrderController extends Controller
              * @example 1
              */
             'captain_order_id' => 'sometimes|nullable|integer|exists:captain_orders,id',
+
+            /**
+             * Switch to cancel / bypass all taxes (tax_id & business_setup.dinein_tax). Default is false.
+             *
+             * @var bool|null
+             *
+             * @example false
+             */
+            'without_tax' => 'sometimes|nullable',
+            'no_tax' => 'sometimes|nullable',
+            'cancel_tax' => 'sometimes|nullable',
+            'exclude_tax' => 'sometimes|nullable',
         ]);
 
         $financialAccountId = $validated['financial_account_id'] ?? $validated['financial_id'] ?? null;
@@ -429,12 +464,25 @@ class CashierOrderController extends Controller
         $captainOrderId = $validated['captain_order_id']
             ?? $carts->firstWhere('captain_order_id', '!=', null)?->captain_order_id;
 
+        $taxScopeKey = $validated['module'] === 'dinein'
+            ? "cashier_cart_without_tax:dinein:table_{$tableId}"
+            : "cashier_cart_without_tax:{$validated['module']}:cashier_{$cashierId}";
+
+        $hasTaxParam = $request->has('without_tax')
+            || $request->has('no_tax')
+            || $request->has('cancel_tax')
+            || $request->has('exclude_tax');
+
+        $withoutTax = $hasTaxParam
+            ? ($request->boolean('without_tax') || $request->boolean('no_tax') || $request->boolean('cancel_tax') || $request->boolean('exclude_tax'))
+            : (bool) Cache::get($taxScopeKey, false);
+
         // Calculate item totals and grand totals using PriceCalculatorService
         $calculatedItems = $carts->map(
-            fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart)
+            fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, 'ar', null, $withoutTax)
         )->all();
 
-        $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems);
+        $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems, $withoutTax);
 
         // Find active open shift for current cashier_man
         $openShiftId = StartShift::where('cashier_man_id', auth()->id())
@@ -583,9 +631,11 @@ class CashierOrderController extends Controller
 
             if ($tableId) {
                 Cache::forget("cashier_cart_discount:dinein:table_{$tableId}");
+                Cache::forget("cashier_cart_without_tax:dinein:table_{$tableId}");
             }
             if ($cashierId) {
                 Cache::forget("cashier_cart_discount:{$validated['module']}:cashier_{$cashierId}");
+                Cache::forget("cashier_cart_without_tax:{$validated['module']}:cashier_{$cashierId}");
             }
 
             return $order;
@@ -595,7 +645,7 @@ class CashierOrderController extends Controller
             'shift',
             'cashier',
             'cashierMan',
-            'hallTable',
+            'hallTable.hall',
             'financialAccount',
             'delivery',
             'paymentMethod',

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Models\OrderCart;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -120,12 +121,27 @@ class CaptainOrderController extends Controller
         }
 
         $doneOrders = $ordersQuery->get()->map(function (Order $order) use ($localize) {
+            $createdAt = $order->created_at ? Carbon::parse($order->created_at) : null;
+            $amPmLower = $createdAt ? strtolower($createdAt->format('a')) : null;
+            $amPmUpper = $createdAt ? strtoupper($createdAt->format('A')) : null;
+
             return [
                 'type' => 'order',
                 'id' => $order->id,
                 'order_id' => $order->id,
                 'module' => $order->module,
+                'order_module' => $order->module,
                 'status' => $order->status,
+                'date' => $createdAt?->format('Y-m-d'),
+                'time' => $createdAt?->format('h:i A'),
+                'time_12' => $createdAt?->format('h:i'),
+                'am_pm' => $amPmLower,
+                'period' => $amPmUpper,
+                'order_date' => $createdAt?->format('Y-m-d'),
+                'order_time' => $createdAt?->format('h:i A'),
+                'order_time_12' => $createdAt?->format('h:i'),
+                'order_am_pm' => $amPmLower,
+                'order_period' => $amPmUpper,
                 'table' => $order->hallTable ? [
                     'id' => $order->hallTable->id,
                     'code' => $order->hallTable->code,
@@ -185,12 +201,27 @@ class CaptainOrderController extends Controller
         }
 
         $doneCarts = $cartsQuery->get()->map(function (OrderCart $cart) use ($localize) {
+            $createdAt = $cart->created_at ? Carbon::parse($cart->created_at) : null;
+            $amPmLower = $createdAt ? strtolower($createdAt->format('a')) : null;
+            $amPmUpper = $createdAt ? strtoupper($createdAt->format('A')) : null;
+
             return [
                 'type' => 'cart_item',
                 'id' => $cart->id,
                 'order_cart_id' => $cart->id,
                 'module' => $cart->module,
+                'order_module' => $cart->module,
                 'status' => $cart->status,
+                'date' => $createdAt?->format('Y-m-d'),
+                'time' => $createdAt?->format('h:i A'),
+                'time_12' => $createdAt?->format('h:i'),
+                'am_pm' => $amPmLower,
+                'period' => $amPmUpper,
+                'order_date' => $createdAt?->format('Y-m-d'),
+                'order_time' => $createdAt?->format('h:i A'),
+                'order_time_12' => $createdAt?->format('h:i'),
+                'order_am_pm' => $amPmLower,
+                'order_period' => $amPmUpper,
                 'table' => $cart->hallTable ? [
                     'id' => $cart->hallTable->id,
                     'code' => $cart->hallTable->code,

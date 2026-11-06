@@ -7,6 +7,7 @@ use App\Models\KitchenOrder;
 use App\Models\Option;
 use App\Models\Order;
 use App\Models\OrderCart;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -68,11 +69,33 @@ class KitchenOrderController extends Controller
 
         return $kitchenOrders->map(function (KitchenOrder $kitchenOrder) use ($lang, $optionsMap): array {
             $table = $kitchenOrder->order?->hallTable ?? $kitchenOrder->orderCart?->hallTable;
+            $module = $kitchenOrder->order?->module ?? $kitchenOrder->orderCart?->module;
+
+            $rawCreatedAt = $kitchenOrder->order?->created_at
+                ?? $kitchenOrder->orderCart?->created_at
+                ?? $kitchenOrder->created_at;
+            $createdAt = $rawCreatedAt ? Carbon::parse($rawCreatedAt) : null;
+            $amPmLower = $createdAt ? strtolower($createdAt->format('a')) : null;
+            $amPmUpper = $createdAt ? strtoupper($createdAt->format('A')) : null;
 
             return [
                 'id' => $kitchenOrder->id,
                 'order_id' => $kitchenOrder->order_id,
                 'order_cart_id' => $kitchenOrder->order_cart_id,
+                'module' => $module,
+                'order_module' => $module,
+                'date' => $createdAt?->format('Y-m-d'),
+                'time' => $createdAt?->format('h:i A'),
+                'time_12' => $createdAt?->format('h:i'),
+                'am_pm' => $amPmLower,
+                'period' => $amPmUpper,
+                'order_date' => $createdAt?->format('Y-m-d'),
+                'order_time' => $createdAt?->format('h:i A'),
+                'order_time_12' => $createdAt?->format('h:i'),
+                'order_am_pm' => $amPmLower,
+                'order_period' => $amPmUpper,
+                'created_at' => $createdAt?->toIso8601String(),
+                'order_created_at' => $createdAt?->toIso8601String(),
                 'table' => $table ? [
                     'id' => $table->id,
                     'code' => $table->code,
@@ -294,12 +317,28 @@ class KitchenOrderController extends Controller
         }
 
         $doneOrders = $ordersQuery->get()->map(function (Order $order) use ($localize) {
+            $createdAt = $order->created_at ? Carbon::parse($order->created_at) : null;
+            $amPmLower = $createdAt ? strtolower($createdAt->format('a')) : null;
+            $amPmUpper = $createdAt ? strtoupper($createdAt->format('A')) : null;
+
             return [
                 'type' => 'order',
                 'id' => $order->id,
                 'order_id' => $order->id,
                 'module' => $order->module,
+                'order_module' => $order->module,
                 'status' => $order->status,
+                'date' => $createdAt?->format('Y-m-d'),
+                'time' => $createdAt?->format('h:i A'),
+                'time_12' => $createdAt?->format('h:i'),
+                'am_pm' => $amPmLower,
+                'period' => $amPmUpper,
+                'order_date' => $createdAt?->format('Y-m-d'),
+                'order_time' => $createdAt?->format('h:i A'),
+                'order_time_12' => $createdAt?->format('h:i'),
+                'order_am_pm' => $amPmLower,
+                'order_period' => $amPmUpper,
+                'order_created_at' => $createdAt?->toIso8601String(),
                 'table' => $order->hallTable ? [
                     'id' => $order->hallTable->id,
                     'code' => $order->hallTable->code,
@@ -357,12 +396,28 @@ class KitchenOrderController extends Controller
         }
 
         $doneCarts = $cartsQuery->get()->map(function (OrderCart $cart) use ($localize) {
+            $createdAt = $cart->created_at ? Carbon::parse($cart->created_at) : null;
+            $amPmLower = $createdAt ? strtolower($createdAt->format('a')) : null;
+            $amPmUpper = $createdAt ? strtoupper($createdAt->format('A')) : null;
+
             return [
                 'type' => 'cart_item',
                 'id' => $cart->id,
                 'order_cart_id' => $cart->id,
                 'module' => $cart->module,
+                'order_module' => $cart->module,
                 'status' => $cart->status,
+                'date' => $createdAt?->format('Y-m-d'),
+                'time' => $createdAt?->format('h:i A'),
+                'time_12' => $createdAt?->format('h:i'),
+                'am_pm' => $amPmLower,
+                'period' => $amPmUpper,
+                'order_date' => $createdAt?->format('Y-m-d'),
+                'order_time' => $createdAt?->format('h:i A'),
+                'order_time_12' => $createdAt?->format('h:i'),
+                'order_am_pm' => $amPmLower,
+                'order_period' => $amPmUpper,
+                'order_created_at' => $createdAt?->toIso8601String(),
                 'table' => $cart->hallTable ? [
                     'id' => $cart->hallTable->id,
                     'code' => $cart->hallTable->code,

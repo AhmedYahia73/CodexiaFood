@@ -23,6 +23,19 @@ class HallTableResource extends JsonResource
             }
         }
 
+        $lang = $request->query('lang')
+            ?? $request->input('lang')
+            ?? $request->header('lang')
+            ?? $request->header('Accept-Language')
+            ?? app()->getLocale();
+        $locale = str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
+
+        $hall = $this->relationLoaded('hall') ? $this->hall : null;
+        $hallName = $hall?->name;
+        $localizedHallName = is_array($hallName)
+            ? ($hallName[$locale] ?? $hallName['ar'] ?? $hallName['en'] ?? null)
+            : $hallName;
+
         return [
             'id' => $this->id,
             'code' => $this->code,
@@ -33,9 +46,11 @@ class HallTableResource extends JsonResource
                 'name' => $this->branch->name,
             ] : null,
             'hall_id' => $this->hall_id,
-            'hall' => $this->relationLoaded('hall') && $this->hall ? [
-                'id' => $this->hall->id,
-                'name' => $this->hall->name,
+            'hall_name' => $localizedHallName,
+            'hall' => $hall ? [
+                'id' => $hall->id,
+                'name' => $hall->name,
+                'localized_name' => $localizedHallName,
             ] : null,
             'status' => (bool) $this->status,
             'qr' => $qrUrl,

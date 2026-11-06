@@ -39,7 +39,7 @@ class PriceCalculatorService
      *
      * @return array{price: float, discount_val: float, tax_val: float, dinein_tax_val: float, final_price: float}
      */
-    public function calculateProduct(Product $product, float $dineinTaxPercent = 0.0, ?Discount $customDiscount = null): array
+    public function calculateProduct(Product $product, float $dineinTaxPercent = 0.0, ?Discount $customDiscount = null, bool $withoutTax = false): array
     {
         $price = (float) $product->price;
 
@@ -56,17 +56,19 @@ class PriceCalculatorService
         $priceAfterDiscount = max(0.00, $price - $discountVal);
 
         $taxVal = 0.00;
-        $tax = $product->tax;
-        if ($tax && ($tax->status ?? true)) {
-            if ($tax->type === 'percentage') {
-                $taxVal = round($priceAfterDiscount * ($tax->amount / 100), 2);
-            } else {
-                $taxVal = round((float) $tax->amount, 2);
+        if (! $withoutTax) {
+            $tax = $product->tax;
+            if ($tax && ($tax->status ?? true)) {
+                if ($tax->type === 'percentage') {
+                    $taxVal = round($priceAfterDiscount * ($tax->amount / 100), 2);
+                } else {
+                    $taxVal = round((float) $tax->amount, 2);
+                }
             }
         }
 
         $dineinTaxVal = 0.00;
-        if ($dineinTaxPercent > 0) {
+        if (! $withoutTax && $dineinTaxPercent > 0) {
             $dineinTaxVal = round($priceAfterDiscount * ($dineinTaxPercent / 100), 2);
         }
 
@@ -87,7 +89,7 @@ class PriceCalculatorService
      *
      * @return array{price: float, discount_val: float, tax_val: float, final_price: float}
      */
-    public function calculateOption(Option $option, ?Discount $productDiscount = null, ?Tax $productTax = null): array
+    public function calculateOption(Option $option, ?Discount $productDiscount = null, ?Tax $productTax = null, bool $withoutTax = false): array
     {
         $price = (float) $option->price;
 
@@ -99,7 +101,7 @@ class PriceCalculatorService
         $priceAfterDiscount = max(0.00, $price - $discountVal);
 
         $taxVal = 0.00;
-        if ($productTax && ($productTax->status ?? true) && $productTax->type === 'percentage') {
+        if (! $withoutTax && $productTax && ($productTax->status ?? true) && $productTax->type === 'percentage') {
             $taxVal = round($priceAfterDiscount * ($productTax->amount / 100), 2);
         }
 
@@ -118,7 +120,7 @@ class PriceCalculatorService
      *
      * @return array{price: float, discount_val: float, tax_val: float, final_price: float}
      */
-    public function calculateAddon(Addon $addon): array
+    public function calculateAddon(Addon $addon, bool $withoutTax = false): array
     {
         $price = (float) $addon->price;
 
@@ -135,12 +137,14 @@ class PriceCalculatorService
         $priceAfterDiscount = max(0.00, $price - $discountVal);
 
         $taxVal = 0.00;
-        $tax = $addon->tax;
-        if ($tax && ($tax->status ?? true)) {
-            if ($tax->type === 'percentage') {
-                $taxVal = round($priceAfterDiscount * ($tax->amount / 100), 2);
-            } else {
-                $taxVal = round((float) $tax->amount, 2);
+        if (! $withoutTax) {
+            $tax = $addon->tax;
+            if ($tax && ($tax->status ?? true)) {
+                if ($tax->type === 'percentage') {
+                    $taxVal = round($priceAfterDiscount * ($tax->amount / 100), 2);
+                } else {
+                    $taxVal = round((float) $tax->amount, 2);
+                }
             }
         }
 
@@ -159,14 +163,14 @@ class PriceCalculatorService
      *
      * @return array<string, mixed>
      */
-    public function calculateCartItem(OrderCart $cart, string $locale = 'ar', ?float $dineinTax = null): array
+    public function calculateCartItem(OrderCart $cart, string $locale = 'ar', ?float $dineinTax = null, bool $withoutTax = false): array
     {
         $product = $cart->product;
         $qty = max(1, (int) $cart->quantity);
         $isGift = (bool) ($cart->is_gift ?? false);
         $effectiveDiscount = $cart->discount ?? $product->discount;
 
-        $dineinTaxRate = ($cart->module === 'dinein')
+        $dineinTaxRate = (! $withoutTax && $cart->module === 'dinein')
             ? ($dineinTax ?? ($cart->dinein_tax > 0 ? (float) $cart->dinein_tax : $this->getDineinTax()))
             : 0.0;
 
@@ -180,7 +184,7 @@ class PriceCalculatorService
                 'final_price' => $giftPrice,
             ];
         } else {
-            $productPricing = $this->calculateProduct($product, $dineinTaxRate, $effectiveDiscount);
+            $productPricing = $this->calculateProduct($product, $dineinTaxRate, $effectiveDiscount, $withoutTax);
         }
 
         $sumOptionsPrice = 0.00;
@@ -203,7 +207,7 @@ class PriceCalculatorService
                         'final_price' => 0.00,
                     ];
                 } else {
-                    $optPricing = $this->calculateOption($option, $effectiveDiscount, $product->tax);
+                    $optPricing = $this->calculateOption($option, $effectiveDiscount, $product->tax, $withoutTax);
                 }
 
                 $sumOptionsPrice += $optPricing['price'];
@@ -257,7 +261,7 @@ class PriceCalculatorService
                     'final_price' => 0.00,
                 ];
             } else {
-                $addPricing = $this->calculateAddon($addon);
+                $addPricing = $this->calculateAddon($addon, $withoutTax);
             }
 
             $sumAddonsPrice += $addPricing['price'];
@@ -315,7 +319,8 @@ class PriceCalculatorService
             'cashier_man_id' => $cart->cashier_man_id,
             'branch_id' => $cart->branch_id,
             'discount_id' => $cart->discount_id,
-            'dinein_tax' => (float) ($cart->dinein_tax ?? $dineinTaxRate),
+            'without_tax' => $withoutTax,
+            'dinein_tax' => $withoutTax ? 0.0 : (float) ($cart->dinein_tax ?? $dineinTaxRate),
             'discount' => $effectiveDiscount ? [
                 'id' => $effectiveDiscount->id,
                 'name' => is_array($effectiveDiscount->name)
@@ -349,9 +354,9 @@ class PriceCalculatorService
      * Calculate grand totals from an array of calculated cart items.
      *
      * @param  array<int, array<string, mixed>>  $calculatedItems
-     * @return array{grand_total_price: float, grand_total_discount: float, grand_total_tax: float, grand_total_dinein_tax: float, grand_final_price: float}
+     * @return array{grand_total_price: float, grand_total_discount: float, grand_total_tax: float, grand_total_dinein_tax: float, grand_final_price: float, without_tax: bool}
      */
-    public function calculateGrandTotals(array $calculatedItems): array
+    public function calculateGrandTotals(array $calculatedItems, bool $withoutTax = false): array
     {
         $grandTotalPrice = 0.00;
         $grandTotalDiscount = 0.00;
@@ -370,9 +375,10 @@ class PriceCalculatorService
         return [
             'grand_total_price' => round($grandTotalPrice, 2),
             'grand_total_discount' => round($grandTotalDiscount, 2),
-            'grand_total_tax' => round($grandTotalTax, 2),
-            'grand_total_dinein_tax' => round($grandTotalDineinTax, 2),
+            'grand_total_tax' => $withoutTax ? 0.00 : round($grandTotalTax, 2),
+            'grand_total_dinein_tax' => $withoutTax ? 0.00 : round($grandTotalDineinTax, 2),
             'grand_final_price' => round($grandFinalPrice, 2),
+            'without_tax' => $withoutTax,
         ];
     }
 }

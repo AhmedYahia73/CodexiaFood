@@ -3,6 +3,7 @@
 use App\Models\Addon;
 use App\Models\Admin;
 use App\Models\Branch;
+use App\Models\Delivery;
 use App\Models\FinancialAccount;
 use App\Models\Kitchen;
 use App\Models\KitchenOrder;
@@ -124,6 +125,12 @@ test('admin can fetch unassigned products, kitchen products, and assign products
 });
 
 test('admin can update order status according to module restrictions', function () {
+    $delivery = Delivery::create([
+        'name' => 'Driver',
+        'phone' => '01000000000',
+        'branch_id' => $this->branch->id,
+    ]);
+
     // Delivery order
     $deliveryOrder = Order::create([
         'module' => 'delivery',
@@ -134,7 +141,10 @@ test('admin can update order status according to module restrictions', function 
 
     // Valid transitions for delivery: done, out_of_delivery, delivered, return, failed_to_delivered / faild_to_delivered
     $this->withHeader('Authorization', 'Bearer '.$this->adminToken)
-        ->putJson("/api/admin/orders/{$deliveryOrder->id}/status", ['status' => 'out_of_delivery'])
+        ->putJson("/api/admin/orders/{$deliveryOrder->id}/status", [
+            'status' => 'out_of_delivery',
+            'delivery_id' => $delivery->id,
+        ])
         ->assertStatus(200)
         ->assertJsonPath('data.status', 'out_of_delivery');
 
@@ -308,7 +318,21 @@ test('kitchen can fetch its orders with localized product, addon and option name
         ->assertJsonPath('status', true);
     expect($resAr->json('data.0.items.0.product_name'))->toBe('شاورما')
         ->and($resAr->json('data.0.items.0.details.0.option_names.0'))->toBe('عائلي')
-        ->and($resAr->json('data.0.items.0.notes'))->toBe('حار جدا');
+        ->and($resAr->json('data.0.items.0.notes'))->toBe('حار جدا')
+        ->and($resAr->json('data.0.module'))->toBe('takeaway')
+        ->and($resAr->json('data.0.order_module'))->toBe('takeaway')
+        ->and($resAr->json('data.0.date'))->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and($resAr->json('data.0.time'))->toMatch('/^\d{2}:\d{2} (AM|PM)$/')
+        ->and($resAr->json('data.0.time_12'))->toMatch('/^\d{2}:\d{2}$/')
+        ->and(in_array($resAr->json('data.0.am_pm'), ['am', 'pm'], true))->toBeTrue()
+        ->and(in_array($resAr->json('data.0.period'), ['AM', 'PM'], true))->toBeTrue()
+        ->and($resAr->json('data.0.order_date'))->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+        ->and($resAr->json('data.0.order_time'))->toMatch('/^\d{2}:\d{2} (AM|PM)$/')
+        ->and($resAr->json('data.0.order_time_12'))->toMatch('/^\d{2}:\d{2}$/')
+        ->and(in_array($resAr->json('data.0.order_am_pm'), ['am', 'pm'], true))->toBeTrue()
+        ->and(in_array($resAr->json('data.0.order_period'), ['AM', 'PM'], true))->toBeTrue()
+        ->and($resAr->json('data.0.created_at'))->not->toBeNull()
+        ->and($resAr->json('data.0.order_created_at'))->not->toBeNull();
 
     // Request in English
     $resEn = $this->withHeader('Authorization', 'Bearer '.$this->kitchenAToken)

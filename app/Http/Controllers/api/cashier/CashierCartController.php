@@ -45,6 +45,38 @@ class CashierCartController extends Controller
         return "cashier_cart_discount:{$module}:cashier_{$cashierId}";
     }
 
+    private function getTaxScopeKey(string $module, ?int $tableId, ?int $cashierId): string
+    {
+        if ($module === 'dinein') {
+            return "cashier_cart_without_tax:dinein:table_{$tableId}";
+        }
+
+        return "cashier_cart_without_tax:{$module}:cashier_{$cashierId}";
+    }
+
+    private function resolveWithoutTax(Request $request, string $module, ?int $tableId, ?int $cashierId): bool
+    {
+        $hasTaxParam = $request->has('without_tax')
+            || $request->has('no_tax')
+            || $request->has('cancel_tax')
+            || $request->has('exclude_tax');
+
+        $scopeKey = $this->getTaxScopeKey($module, $tableId, $cashierId);
+
+        if ($hasTaxParam) {
+            $withoutTax = $request->boolean('without_tax')
+                || $request->boolean('no_tax')
+                || $request->boolean('cancel_tax')
+                || $request->boolean('exclude_tax');
+
+            Cache::put($scopeKey, $withoutTax, now()->addHours(12));
+
+            return $withoutTax;
+        }
+
+        return (bool) Cache::get($scopeKey, false);
+    }
+
     private function cartQuery(?int $cashierId, ?int $tableId = null): Builder
     {
         return OrderCart::with([
@@ -79,6 +111,7 @@ class CashierCartController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'يرجى تحديد جهاز الكاشير أولاً',
+                'without_tax' => false,
                 'data' => [],
                 'grand_totals' => [
                     'grand_total_price' => 0.00,
@@ -86,6 +119,7 @@ class CashierCartController extends Controller
                     'grand_total_tax' => 0.00,
                     'grand_total_dinein_tax' => 0.00,
                     'grand_final_price' => 0.00,
+                    'without_tax' => false,
                 ],
             ], 400);
         }
@@ -126,6 +160,18 @@ class CashierCartController extends Controller
              * @example ar
              */
             'lang' => 'sometimes|nullable|string|in:ar,en',
+
+            /**
+             * Switch to cancel / bypass all taxes (tax_id & business_setup.dinein_tax). Default is false.
+             *
+             * @var bool|null
+             *
+             * @example false
+             */
+            'without_tax' => 'sometimes|nullable',
+            'no_tax' => 'sometimes|nullable',
+            'cancel_tax' => 'sometimes|nullable',
+            'exclude_tax' => 'sometimes|nullable',
         ]);
 
         $locale = $this->getLocale($request);
@@ -134,6 +180,7 @@ class CashierCartController extends Controller
         if ($validated['module'] === 'dinein' && ! $tableId) {
             return response()->json([
                 'status' => true,
+                'without_tax' => false,
                 'data' => [],
                 'grand_totals' => [
                     'grand_total_price' => 0.00,
@@ -141,9 +188,12 @@ class CashierCartController extends Controller
                     'grand_total_tax' => 0.00,
                     'grand_total_dinein_tax' => 0.00,
                     'grand_final_price' => 0.00,
+                    'without_tax' => false,
                 ],
             ]);
         }
+
+        $withoutTax = $this->resolveWithoutTax($request, $validated['module'], $tableId, $cashierId);
 
         $query = $this->cartQuery($cashierId, $validated['module'] === 'dinein' ? $tableId : null)
             ->where('module', $validated['module']);
@@ -151,13 +201,14 @@ class CashierCartController extends Controller
         $carts = $query->orderByRaw('COALESCE(parent_id, id) ASC, id ASC')->get();
 
         $calculatedItems = $carts->map(
-            fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale)
+            fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale, null, $withoutTax)
         )->all();
 
-        $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems);
+        $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems, $withoutTax);
 
         return response()->json([
             'status' => true,
+            'without_tax' => $withoutTax,
             'data' => $calculatedItems,
             'grand_totals' => $grandTotals,
         ]);
@@ -235,6 +286,18 @@ class CashierCartController extends Controller
              * @var string|null
              */
             'notes' => 'nullable|string',
+
+            /**
+             * Switch to cancel / bypass all taxes (tax_id & business_setup.dinein_tax). Default is false.
+             *
+             * @var bool|null
+             *
+             * @example false
+             */
+            'without_tax' => 'sometimes|nullable',
+            'no_tax' => 'sometimes|nullable',
+            'cancel_tax' => 'sometimes|nullable',
+            'exclude_tax' => 'sometimes|nullable',
 
             /**
              * Discount ID to apply to this item or cart.
@@ -378,7 +441,9 @@ class CashierCartController extends Controller
             Cache::put($scopeKey, $discountId, now()->addHours(12));
         }
 
-        $cartDineinTax = ($validated['module'] === 'dinein')
+        $withoutTax = $this->resolveWithoutTax($request, $validated['module'], $tableId, $cashierId);
+
+        $cartDineinTax = (! $withoutTax && $validated['module'] === 'dinein')
             ? (float) ($businessSetup?->dinein_tax ?? 0.0)
             : 0.0;
 
@@ -461,7 +526,7 @@ class CashierCartController extends Controller
             'addonCarts.addon.tax',
         ]);
 
-        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale, null, $withoutTax);
 
         if ($cart->module === 'dinein') {
             app(KitchenDispatchService::class)->dispatchFromCart($cart);
@@ -470,6 +535,7 @@ class CashierCartController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'تمت إضافة المنتج إلى السلة بنجاح',
+            'without_tax' => $withoutTax,
             'data' => $calculated,
         ], 201);
     }
@@ -479,7 +545,17 @@ class CashierCartController extends Controller
      */
     public function show(Request $request, OrderCart $cart): JsonResponse
     {
+        $validated = $request->validate([
+            'without_tax' => 'sometimes|nullable',
+            'no_tax' => 'sometimes|nullable',
+            'cancel_tax' => 'sometimes|nullable',
+            'exclude_tax' => 'sometimes|nullable',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
         $locale = $this->getLocale($request);
+        $cashierId = auth()->user()?->cashier_id;
+        $withoutTax = $this->resolveWithoutTax($request, $cart->module, $cart->hall_table_id, $cashierId);
 
         $cart->load([
             'product.discount',
@@ -490,10 +566,11 @@ class CashierCartController extends Controller
             'addonCarts.addon.tax',
         ]);
 
-        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale, null, $withoutTax);
 
         return response()->json([
             'status' => true,
+            'without_tax' => $withoutTax,
             'data' => $calculated,
         ]);
     }
@@ -508,6 +585,10 @@ class CashierCartController extends Controller
             'quantity' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
             'discount_id' => 'sometimes|nullable|integer|exists:discounts,id',
+            'without_tax' => 'sometimes|nullable',
+            'no_tax' => 'sometimes|nullable',
+            'cancel_tax' => 'sometimes|nullable',
+            'exclude_tax' => 'sometimes|nullable',
             'variations' => 'nullable|array',
             'variations.*.variation_id' => 'required_with:variations|exists:variations,id',
             'variations.*.option_ids' => 'required_with:variations|array',
@@ -517,6 +598,8 @@ class CashierCartController extends Controller
         ]);
 
         $locale = $this->getLocale($request);
+        $cashierId = auth()->user()?->cashier_id;
+        $withoutTax = $this->resolveWithoutTax($request, $validated['module'] ?? $cart->module, $cart->hall_table_id, $cashierId);
 
         DB::transaction(function () use ($validated, $cart): void {
             $updateData = [];
@@ -596,11 +679,12 @@ class CashierCartController extends Controller
             'addonCarts.addon.tax',
         ]);
 
-        $calculated = $this->priceCalculator->calculateCartItem($cart, $locale);
+        $calculated = $this->priceCalculator->calculateCartItem($cart->fresh(), $locale, null, $withoutTax);
 
         return response()->json([
             'status' => true,
             'message' => 'تم تحديث عنصر السلة بنجاح',
+            'without_tax' => $withoutTax,
             'data' => $calculated,
         ]);
     }
@@ -673,6 +757,7 @@ class CashierCartController extends Controller
             $query->where('module', $validated['module']);
             $scopeKey = $this->getCartScopeKey($validated['module'], $tableId, $cashierId);
             Cache::forget($scopeKey);
+            Cache::forget($this->getTaxScopeKey($validated['module'], $tableId, $cashierId));
         }
 
         $query->delete();
@@ -680,6 +765,75 @@ class CashierCartController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'تم تفريغ السلة بنجاح',
+        ]);
+    }
+
+    /**
+     * Set or toggle without_tax switch for the current cart scope.
+     */
+    public function setTaxSwitch(Request $request): JsonResponse
+    {
+        $cashierId = auth()->user()?->cashier_id;
+        if (! $cashierId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'يرجى تحديد جهاز الكاشير أولاً',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            /**
+             * Order module enum.
+             *
+             * @var string
+             *
+             * @example takeaway
+             */
+            'module' => 'required|in:takeaway,dinein,delivery',
+
+            /**
+             * Hall Table ID for dinein cart.
+             *
+             * @var int|null
+             */
+            'table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+            'hall_table_id' => 'sometimes|nullable|integer|exists:hall_tables,id',
+
+            /**
+             * Switch value: true to cancel taxes, false to apply taxes. Default is false.
+             *
+             * @var bool|null
+             *
+             * @example true
+             */
+            'without_tax' => 'sometimes|nullable',
+            'no_tax' => 'sometimes|nullable',
+            'cancel_tax' => 'sometimes|nullable',
+            'exclude_tax' => 'sometimes|nullable',
+            'lang' => 'sometimes|nullable|string|in:ar,en',
+        ]);
+
+        $locale = $this->getLocale($request);
+        $tableId = $validated['table_id'] ?? $validated['hall_table_id'] ?? null;
+        $withoutTax = $this->resolveWithoutTax($request, $validated['module'], $tableId, $cashierId);
+
+        $query = $this->cartQuery($cashierId, $validated['module'] === 'dinein' ? $tableId : null)
+            ->where('module', $validated['module']);
+
+        $carts = $query->orderByRaw('COALESCE(parent_id, id) ASC, id ASC')->get();
+
+        $calculatedItems = $carts->map(
+            fn (OrderCart $cart) => $this->priceCalculator->calculateCartItem($cart, $locale, null, $withoutTax)
+        )->all();
+
+        $grandTotals = $this->priceCalculator->calculateGrandTotals($calculatedItems, $withoutTax);
+
+        return response()->json([
+            'status' => true,
+            'message' => $withoutTax ? 'تم إلغاء الضريبة بنجاح' : 'تم تفعيل الضريبة بنجاح',
+            'without_tax' => $withoutTax,
+            'data' => $calculatedItems,
+            'grand_totals' => $grandTotals,
         ]);
     }
 

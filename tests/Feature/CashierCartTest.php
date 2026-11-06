@@ -824,3 +824,103 @@ test('checking out with gift items creates correct order products with price_gif
     expect($giftProduct['is_gift'])->toBeTrue();
     expect($giftProduct['quantity'])->toBe(4);
 });
+
+test('cashier cart without_tax switch cancels product tax_id and business_setup dinein_tax when true', function () {
+    // Set 10% dinein_tax in BusinessSetup
+    BusinessSetup::create([
+        'name' => 'مطعم كودكسا',
+        'phone' => '01000000000',
+        'face' => 'https://facebook.com',
+        'instagram' => 'https://instagram.com',
+        'whats' => '01000000000',
+        'logo' => 'logo.png',
+        'description' => 'وصف',
+        'dinein_tax' => 10.0,
+    ]);
+    app(PriceCalculatorService::class)->setCachedDineinTax(null);
+
+    // Product price = 100, discount 20% = 20, price after discount = 80
+    // Tax 14% = 11.20, Dinein tax 10% = 8.00
+    // Normal total with taxes = 80 + 11.20 + 8.00 = 99.20
+    $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])
+        ->assertStatus(201);
+
+    // 1. By default (without_tax = false or omitted), taxes are applied
+    $defaultRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id)
+        ->assertStatus(200);
+
+    expect($defaultRes->json('without_tax'))->toBeFalse()
+        ->and((float) $defaultRes->json('grand_totals.grand_total_tax'))->toBe(11.2)
+        ->and((float) $defaultRes->json('grand_totals.grand_total_dinein_tax'))->toBe(8.0)
+        ->and((float) $defaultRes->json('grand_totals.grand_final_price'))->toBe(99.2);
+
+    // 2. When switch without_tax is true, tax_id and dinein_tax are both canceled (0.00)
+    $withoutTaxRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id.'&without_tax=true')
+        ->assertStatus(200);
+
+    expect($withoutTaxRes->json('without_tax'))->toBeTrue()
+        ->and((float) $withoutTaxRes->json('data.0.product.tax_val'))->toBe(0.0)
+        ->and((float) $withoutTaxRes->json('data.0.product.dinein_tax_val'))->toBe(0.0)
+        ->and((float) $withoutTaxRes->json('data.0.total_tax'))->toBe(0.0)
+        ->and((float) $withoutTaxRes->json('data.0.total_dinein_tax'))->toBe(0.0)
+        ->and((float) $withoutTaxRes->json('data.0.total_final_price'))->toBe(80.0)
+        ->and((float) $withoutTaxRes->json('grand_totals.grand_total_tax'))->toBe(0.0)
+        ->and((float) $withoutTaxRes->json('grand_totals.grand_total_dinein_tax'))->toBe(0.0)
+        ->and((float) $withoutTaxRes->json('grand_totals.grand_final_price'))->toBe(80.0);
+
+    // 3. Dedicated endpoint POST /api/cashier/cart/tax-switch can toggle it
+    $switchOffRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart/tax-switch', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'without_tax' => false,
+        ])
+        ->assertStatus(200);
+
+    expect($switchOffRes->json('without_tax'))->toBeFalse()
+        ->and((float) $switchOffRes->json('grand_totals.grand_total_tax'))->toBe(11.2)
+        ->and((float) $switchOffRes->json('grand_totals.grand_total_dinein_tax'))->toBe(8.0)
+        ->and((float) $switchOffRes->json('grand_totals.grand_final_price'))->toBe(99.2);
+
+    // 4. Switch on again via endpoint
+    $switchOnRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/cart/tax-switch', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'without_tax' => true,
+        ])
+        ->assertStatus(200);
+
+    expect($switchOnRes->json('without_tax'))->toBeTrue()
+        ->and((float) $switchOnRes->json('grand_totals.grand_total_tax'))->toBe(0.0)
+        ->and((float) $switchOnRes->json('grand_totals.grand_total_dinein_tax'))->toBe(0.0)
+        ->and((float) $switchOnRes->json('grand_totals.grand_final_price'))->toBe(80.0);
+
+    // 5. Checkout retains without_tax state and produces tax-free order
+    $account = FinancialAccount::create([
+        'name' => ['ar' => 'خزينة', 'en' => 'Treasury'],
+        'status' => true,
+        'balance' => 0.00,
+        'branch_id' => $this->branch->id,
+    ]);
+
+    $checkoutRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
+        ->postJson('/api/cashier/orders/checkout', [
+            'module' => 'dinein',
+            'table_id' => $this->hallTable->id,
+            'financial_account_id' => $account->id,
+        ])
+        ->assertStatus(201);
+
+    expect((float) $checkoutRes->json('data.total_tax'))->toBe(0.0)
+        ->and((float) $checkoutRes->json('data.total_dinein_tax'))->toBe(0.0)
+        ->and((float) $checkoutRes->json('data.final_price'))->toBe(80.0);
+});

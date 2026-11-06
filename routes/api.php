@@ -372,6 +372,7 @@ Route::middleware(['auth:cashier_man', 'role:cashier_man,cashier'])->prefix('cas
     Route::get('cart/discounts', [CashierCartController::class, 'discounts']);
     Route::get('discounts', [CashierCartController::class, 'discounts']);
     Route::post('cart/apply-discount', [CashierCartController::class, 'applyDiscount']);
+    Route::post('cart/tax-switch', [CashierCartController::class, 'setTaxSwitch']);
     Route::apiResource('cart', CashierCartController::class);
 
     Route::post('orders/checkout', [CashierOrderController::class, 'checkout']);
