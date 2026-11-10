@@ -60,7 +60,7 @@ class PriceCalculatorService
             $tax = $product->tax;
             if ($tax && ($tax->status ?? true)) {
                 if ($tax->type === 'percentage') {
-                    $taxVal = round($priceAfterDiscount * ($tax->amount / 100), 2);
+                    $taxVal = round($price * ($tax->amount / 100), 2);
                 } else {
                     $taxVal = round((float) $tax->amount, 2);
                 }
@@ -69,10 +69,10 @@ class PriceCalculatorService
 
         $dineinTaxVal = 0.00;
         if (! $withoutTax && $dineinTaxPercent > 0) {
-            $dineinTaxVal = round($priceAfterDiscount * ($dineinTaxPercent / 100), 2);
+            $dineinTaxVal = round($price * ($dineinTaxPercent / 100), 2);
         }
 
-        $finalPrice = round($price - $discountVal + $taxVal + $dineinTaxVal, 2);
+        $finalPrice = round($priceAfterDiscount + $taxVal + $dineinTaxVal, 2);
 
         return [
             'price' => $price,
@@ -102,10 +102,10 @@ class PriceCalculatorService
 
         $taxVal = 0.00;
         if (! $withoutTax && $productTax && ($productTax->status ?? true) && $productTax->type === 'percentage') {
-            $taxVal = round($priceAfterDiscount * ($productTax->amount / 100), 2);
+            $taxVal = round($price * ($productTax->amount / 100), 2);
         }
 
-        $finalPrice = round($price - $discountVal + $taxVal, 2);
+        $finalPrice = round($priceAfterDiscount + $taxVal, 2);
 
         return [
             'price' => $price,
@@ -141,14 +141,14 @@ class PriceCalculatorService
             $tax = $addon->tax;
             if ($tax && ($tax->status ?? true)) {
                 if ($tax->type === 'percentage') {
-                    $taxVal = round($priceAfterDiscount * ($tax->amount / 100), 2);
+                    $taxVal = round($price * ($tax->amount / 100), 2);
                 } else {
                     $taxVal = round((float) $tax->amount, 2);
                 }
             }
         }
 
-        $finalPrice = round($price - $discountVal + $taxVal, 2);
+        $finalPrice = round($priceAfterDiscount + $taxVal, 2);
 
         return [
             'price' => $price,

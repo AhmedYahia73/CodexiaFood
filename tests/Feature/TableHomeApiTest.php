@@ -128,11 +128,11 @@ test('public user can fetch products with calculated prices and filter by catego
     $productData = collect($res->json('data'))->firstWhere('id', $this->product->id);
     expect($productData)->not->toBeNull();
     expect($productData['name'])->toBe('برجر لحم');
-    // price = 100, discount 10% = 10, tax 14% on (100-10)=90 => 12.6, final_price = 102.6
+    // price = 100, discount 10% = 10, tax 14% on original (100) => 14.0, final_price = 100 - 10 + 14 = 104
     expect($productData['price'])->toEqual(100);
     expect($productData['discount_val'])->toEqual(10);
-    expect($productData['tax_val'])->toEqual(12.6);
-    expect($productData['final_price'])->toEqual(102.6);
+    expect($productData['tax_val'])->toEqual(14.0);
+    expect($productData['final_price'])->toEqual(104.0);
 });
 
 test('public user can fetch product details with variations and options without auth', function () {

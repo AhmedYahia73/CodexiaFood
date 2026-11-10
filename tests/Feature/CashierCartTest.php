@@ -136,18 +136,18 @@ test('cashier can add item to cart with notes and options and addons', function 
 });
 
 test('cashier cart index calculates item totals and grand totals correctly', function () {
-    // Product: price = 100, discount 20% = 20, tax 14% on (80) = 11.20, final = 91.20
-    // Option: price = 20, discount 20% = 4, tax 14% on (16) = 2.24, final = 18.24
+    // Product: price = 100, discount 20% = 20, tax 14% on original (100) = 14.00, final = 94.00
+    // Option: price = 20, discount 20% = 4, tax 14% on original (20) = 2.80, final = 18.80
     // Addon: price = 10, discount = 0, tax = 0, final = 10.00
     // Total Unit Price = 100 + 20 + 10 = 130
     // Total Unit Discount = 20 + 4 + 0 = 24
-    // Total Unit Tax = 11.20 + 2.24 + 0 = 13.44
-    // Total Unit Final = 91.20 + 18.24 + 10 = 119.44
+    // Total Unit Tax = 14.00 + 2.80 + 0 = 16.80
+    // Total Unit Final = 94.00 + 18.80 + 10 = 122.80
     // Quantity = 2
     // Item Total Price = 130 * 2 = 260
     // Item Total Discount = 24 * 2 = 48
-    // Item Total Tax = 13.44 * 2 = 26.88
-    // Item Total Final = 119.44 * 2 = 238.88
+    // Item Total Tax = 16.80 * 2 = 33.60
+    // Item Total Final = 122.80 * 2 = 245.60
 
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/cart', [
@@ -187,14 +187,14 @@ test('cashier cart index calculates item totals and grand totals correctly', fun
     $item = $response->json('data.0');
     expect((float) $item['total_price'])->toBe(260.0);
     expect((float) $item['total_discount'])->toBe(48.0);
-    expect((float) $item['total_tax'])->toBe(26.88);
-    expect((float) $item['total_final_price'])->toBe(238.88);
+    expect((float) $item['total_tax'])->toBe(33.6);
+    expect((float) $item['total_final_price'])->toBe(245.6);
 
     $grand = $response->json('grand_totals');
     expect((float) $grand['grand_total_price'])->toBe(260.0);
     expect((float) $grand['grand_total_discount'])->toBe(48.0);
-    expect((float) $grand['grand_total_tax'])->toBe(26.88);
-    expect((float) $grand['grand_final_price'])->toBe(238.88);
+    expect((float) $grand['grand_total_tax'])->toBe(33.6);
+    expect((float) $grand['grand_final_price'])->toBe(245.6);
 });
 
 test('dinein_tax from business setup is applied as percentage on products when module is dinein and not takeaway', function () {
@@ -215,9 +215,9 @@ test('dinein_tax from business setup is applied as percentage on products when m
 
     // 1. Add dinein cart item:
     // Product price = 100, discount 20% = 20, price after discount = 80
-    // Base tax 14% on (80) = 11.20 (kept in tax_val and total_tax independently)
-    // Dinein tax 10% on (80) = 8.00 (kept in dinein_tax_val and total_dinein_tax independently)
-    // Final product price = 80 + 11.20 + 8.00 = 99.20
+    // Base tax 14% on original price (100) = 14.00 (kept in tax_val and total_tax independently)
+    // Dinein tax 10% on original price (100) = 10.00 (kept in dinein_tax_val and total_dinein_tax independently)
+    // Final product price = 80 + 14.00 + 10.00 = 104.00
     $dineinRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/cart', [
             'module' => 'dinein',
@@ -227,21 +227,21 @@ test('dinein_tax from business setup is applied as percentage on products when m
         ])
         ->assertStatus(201);
 
-    expect((float) $dineinRes->json('data.product.tax_val'))->toBe(11.2)
-        ->and((float) $dineinRes->json('data.product.dinein_tax_val'))->toBe(8.0)
-        ->and((float) $dineinRes->json('data.product.final_price'))->toBe(99.2)
-        ->and((float) $dineinRes->json('data.total_tax'))->toBe(11.2)
-        ->and((float) $dineinRes->json('data.total_dinein_tax'))->toBe(8.0)
-        ->and((float) $dineinRes->json('data.total_final_price'))->toBe(99.2);
+    expect((float) $dineinRes->json('data.product.tax_val'))->toBe(14.0)
+        ->and((float) $dineinRes->json('data.product.dinein_tax_val'))->toBe(10.0)
+        ->and((float) $dineinRes->json('data.product.final_price'))->toBe(104.0)
+        ->and((float) $dineinRes->json('data.total_tax'))->toBe(14.0)
+        ->and((float) $dineinRes->json('data.total_dinein_tax'))->toBe(10.0)
+        ->and((float) $dineinRes->json('data.total_final_price'))->toBe(104.0);
 
     // Also verify cart index grand totals separation
     $indexRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->getJson('/api/cashier/cart?module=dinein&table_id='.$this->hallTable->id)
         ->assertStatus(200);
 
-    expect((float) $indexRes->json('grand_totals.grand_total_tax'))->toBe(11.2)
-        ->and((float) $indexRes->json('grand_totals.grand_total_dinein_tax'))->toBe(8.0)
-        ->and((float) $indexRes->json('grand_totals.grand_final_price'))->toBe(99.2);
+    expect((float) $indexRes->json('grand_totals.grand_total_tax'))->toBe(14.0)
+        ->and((float) $indexRes->json('grand_totals.grand_total_dinein_tax'))->toBe(10.0)
+        ->and((float) $indexRes->json('grand_totals.grand_final_price'))->toBe(104.0);
 
     // 2. Add takeaway cart item with same product:
     // Dinein tax must NOT be applied to takeaway
@@ -253,11 +253,11 @@ test('dinein_tax from business setup is applied as percentage on products when m
         ])
         ->assertStatus(201);
 
-    expect((float) $takeawayRes->json('data.product.tax_val'))->toBe(11.2)
+    expect((float) $takeawayRes->json('data.product.tax_val'))->toBe(14.0)
         ->and((float) $takeawayRes->json('data.product.dinein_tax_val'))->toBe(0.0)
-        ->and((float) $takeawayRes->json('data.product.final_price'))->toBe(91.2)
-        ->and((float) $takeawayRes->json('data.total_tax'))->toBe(11.2)
-        ->and((float) $takeawayRes->json('data.total_final_price'))->toBe(91.2);
+        ->and((float) $takeawayRes->json('data.product.final_price'))->toBe(94.0)
+        ->and((float) $takeawayRes->json('data.total_tax'))->toBe(14.0)
+        ->and((float) $takeawayRes->json('data.total_final_price'))->toBe(94.0);
 });
 
 test('cashier can fetch active discounts for selection', function () {
@@ -840,8 +840,8 @@ test('cashier cart without_tax switch cancels product tax_id and business_setup 
     app(PriceCalculatorService::class)->setCachedDineinTax(null);
 
     // Product price = 100, discount 20% = 20, price after discount = 80
-    // Tax 14% = 11.20, Dinein tax 10% = 8.00
-    // Normal total with taxes = 80 + 11.20 + 8.00 = 99.20
+    // Tax 14% on original (100) = 14.00, Dinein tax 10% on original (100) = 10.00
+    // Normal total with taxes = 80 + 14.00 + 10.00 = 104.00
     $this->withHeader('Authorization', 'Bearer '.$this->token)
         ->postJson('/api/cashier/cart', [
             'module' => 'dinein',
@@ -857,9 +857,9 @@ test('cashier cart without_tax switch cancels product tax_id and business_setup 
         ->assertStatus(200);
 
     expect($defaultRes->json('without_tax'))->toBeFalse()
-        ->and((float) $defaultRes->json('grand_totals.grand_total_tax'))->toBe(11.2)
-        ->and((float) $defaultRes->json('grand_totals.grand_total_dinein_tax'))->toBe(8.0)
-        ->and((float) $defaultRes->json('grand_totals.grand_final_price'))->toBe(99.2);
+        ->and((float) $defaultRes->json('grand_totals.grand_total_tax'))->toBe(14.0)
+        ->and((float) $defaultRes->json('grand_totals.grand_total_dinein_tax'))->toBe(10.0)
+        ->and((float) $defaultRes->json('grand_totals.grand_final_price'))->toBe(104.0);
 
     // 2. When switch without_tax is true, tax_id and dinein_tax are both canceled (0.00)
     $withoutTaxRes = $this->withHeader('Authorization', 'Bearer '.$this->token)
@@ -886,9 +886,9 @@ test('cashier cart without_tax switch cancels product tax_id and business_setup 
         ->assertStatus(200);
 
     expect($switchOffRes->json('without_tax'))->toBeFalse()
-        ->and((float) $switchOffRes->json('grand_totals.grand_total_tax'))->toBe(11.2)
-        ->and((float) $switchOffRes->json('grand_totals.grand_total_dinein_tax'))->toBe(8.0)
-        ->and((float) $switchOffRes->json('grand_totals.grand_final_price'))->toBe(99.2);
+        ->and((float) $switchOffRes->json('grand_totals.grand_total_tax'))->toBe(14.0)
+        ->and((float) $switchOffRes->json('grand_totals.grand_total_dinein_tax'))->toBe(10.0)
+        ->and((float) $switchOffRes->json('grand_totals.grand_final_price'))->toBe(104.0);
 
     // 4. Switch on again via endpoint
     $switchOnRes = $this->withHeader('Authorization', 'Bearer '.$this->token)

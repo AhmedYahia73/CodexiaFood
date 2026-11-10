@@ -114,7 +114,7 @@ test('cashier can fetch sub categories and filter by parent category_id', functi
     expect($subData['name'])->toBe('Steak');
 });
 
-test('cashier can fetch products with percentage discount and tax calculated after discount', function () {
+test('cashier can fetch products with percentage discount and tax calculated on original price', function () {
     // 20% discount
     $discount = Discount::create([
         'name' => ['ar' => 'خصم 20%', 'en' => '20% Discount'],
@@ -123,7 +123,7 @@ test('cashier can fetch products with percentage discount and tax calculated aft
         'status' => true,
     ]);
 
-    // 14% tax on price after discount
+    // 14% tax on original price
     $tax = Tax::create([
         'name' => ['ar' => 'ضريبة 14%', 'en' => '14% VAT'],
         'type' => 'percentage',
@@ -133,9 +133,8 @@ test('cashier can fetch products with percentage discount and tax calculated aft
 
     // Product price = 100
     // discount_val = 100 * 20% = 20
-    // price after discount = 100 - 20 = 80
-    // tax_val = 80 * 14% = 11.20
-    // final_price = 100 - 20 + 11.20 = 91.20
+    // tax_val on original price before discount = 100 * 14% = 14.00
+    // final_price = 100 - 20 + 14.00 = 94.00
     $product = Product::create([
         'name' => ['ar' => 'برجر لحم فاخر', 'en' => 'Gourmet Beef Burger'],
         'description' => ['ar' => 'وصف المنتج', 'en' => 'Product description'],
@@ -153,8 +152,8 @@ test('cashier can fetch products with percentage discount and tax calculated aft
     expect($item['name'])->toBe('برجر لحم فاخر');
     expect((float) $item['price'])->toBe(100.0);
     expect((float) $item['discount_val'])->toBe(20.0);
-    expect((float) $item['tax_val'])->toBe(11.2);
-    expect((float) $item['final_price'])->toBe(91.2);
+    expect((float) $item['tax_val'])->toBe(14.0);
+    expect((float) $item['final_price'])->toBe(94.0);
 });
 
 test('cashier can fetch products with fixed value discount and fixed tax', function () {
@@ -233,9 +232,8 @@ test('cashier can fetch product details with variations and options where option
 
     // Option price = 30
     // Inherited 10% discount: 30 * 10% = 3.00
-    // Price after discount = 27
-    // 14% tax: 27 * 14% = 3.78
-    // Final price = 30 - 3 + 3.78 = 30.78
+    // 14% tax on original (30) = 4.20
+    // Final price = 30 - 3 + 4.20 = 31.20
     $option = Option::create([
         'name' => ['ar' => 'دبل', 'en' => 'Double'],
         'product_id' => $product->id,
@@ -252,15 +250,15 @@ test('cashier can fetch product details with variations and options where option
     expect($productData['name'])->toBe('قهوة اسبريسو');
     expect((float) $productData['price'])->toBe(50.0);
     expect((float) $productData['discount_val'])->toBe(5.0);
-    expect((float) $productData['tax_val'])->toBe(6.3); // 45 * 14% = 6.30
-    expect((float) $productData['final_price'])->toBe(51.3);
+    expect((float) $productData['tax_val'])->toBe(7.0); // 50 * 14% = 7.00
+    expect((float) $productData['final_price'])->toBe(52.0);
 
     $optionData = $productData['variations'][0]['options'][0];
     expect($optionData['name'])->toBe('دبل');
     expect((float) $optionData['price'])->toBe(30.0);
     expect((float) $optionData['discount_val'])->toBe(3.0);
-    expect((float) $optionData['tax_val'])->toBe(3.78);
-    expect((float) $optionData['final_price'])->toBe(30.78);
+    expect((float) $optionData['tax_val'])->toBe(4.2);
+    expect((float) $optionData['final_price'])->toBe(31.2);
 });
 
 test('cashier can fetch addons with discount_val, tax_val, and final_price', function () {

@@ -417,7 +417,7 @@ class TableOrderCartController extends Controller
 
         if ($response = $this->validateGeofence($request, $hallTable->branch)) {
             return $response;
-        } 
+        }
 
         return response()->json([
             'status' => true,
