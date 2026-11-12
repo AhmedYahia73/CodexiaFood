@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Admin;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +38,12 @@ class RoleMiddleware
             ], 401);
         }
 
-        $userRole = $user->role ?? null;
+        $userRole = null;
+        if ($user instanceof Admin) {
+            $userRole = 'admin';
+        } elseif (is_string($user->role ?? null)) {
+            $userRole = $user->role;
+        }
 
         if (! $userRole || (! in_array($userRole, $roles) && ! in_array('*', $roles))) {
             return response()->json([

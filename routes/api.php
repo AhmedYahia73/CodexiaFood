@@ -31,6 +31,7 @@ use App\Http\Controllers\api\admin\ProductRecipeController;
 use App\Http\Controllers\api\admin\PurchaseController;
 use App\Http\Controllers\api\admin\PurchaseDueController;
 use App\Http\Controllers\api\admin\ReportController;
+use App\Http\Controllers\api\admin\RoleController;
 use App\Http\Controllers\api\admin\SaleController;
 use App\Http\Controllers\api\admin\SaleDueController;
 use App\Http\Controllers\api\admin\SalerController;
@@ -95,8 +96,11 @@ Route::prefix('auth')->group(function () {
 | Admin Protected CRUD Routes (role = admin)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function () {
+Route::middleware(['auth:admin', 'role:admin', 'permission'])->prefix('admin')->group(function () {
     // Select options endpoints for frontend dropdowns
+    Route::get('roles/permissions', [RoleController::class, 'permissions']);
+    Route::get('roles/select-options', [RoleController::class, 'selectOptions']);
+    Route::get('roles/lists', [RoleController::class, 'permissions']);
     Route::get('addons/lists', [AddonController::class, 'lists']);
     Route::get('addons/select-options', [AddonController::class, 'selectOptions']);
     Route::get('admins/select-options', [AdminController::class, 'selectOptions']);
@@ -180,6 +184,7 @@ Route::middleware(['auth:admin', 'role:admin'])->prefix('admin')->group(function
     Route::apiResource('taxes', TaxController::class);
     Route::apiResource('units', UnitController::class);
     Route::apiResource('wastes', WasteController::class);
+    Route::apiResource('roles', RoleController::class);
 
     // Purchase Dues (Installments)
     Route::prefix('purchase-dues')->group(function () {

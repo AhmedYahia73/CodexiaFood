@@ -18,7 +18,9 @@ class AdminResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'role_id' => $this->role_id,
-            'role' => $this->role,
+            'role' => $this->relationLoaded('role') && $this->role
+                ? new RoleResource($this->role)
+                : ($this->role?->name ?? null),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
