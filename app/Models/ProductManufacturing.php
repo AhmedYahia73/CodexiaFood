@@ -14,6 +14,7 @@ class ProductManufacturing extends Model
     protected $fillable = [
         'product_recipe_id',
         'product_id',
+        'option_combination_key',
     ];
 
     public function productRecipe(): BelongsTo

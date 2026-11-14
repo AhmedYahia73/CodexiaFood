@@ -11,6 +11,7 @@ use App\Models\OrderVariationCart;
 use App\Services\GeofenceService;
 use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
+use App\Services\ProductManufacturingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -225,6 +226,7 @@ class TableOrderCartController extends Controller
 
         // Dispatch dinein cart item to kitchen for preparation
         app(KitchenDispatchService::class)->dispatchFromCart($cart);
+        ProductManufacturingService::deductStockForCartItem($cart, $hallTable->branch_id);
 
         return response()->json([
             'status' => true,

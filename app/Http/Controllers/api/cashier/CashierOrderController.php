@@ -7,7 +7,6 @@ use App\Http\Resources\OrderResource;
 use App\Models\Cashier;
 use App\Models\Delivery;
 use App\Models\FinancialAccount;
-use App\Models\MaterialStock;
 use App\Models\Order;
 use App\Models\OrderCart;
 use App\Models\OrderPAddon;
@@ -15,11 +14,10 @@ use App\Models\OrderPOption;
 use App\Models\OrderProduct;
 use App\Models\OrderPVariation;
 use App\Models\PaymentMethod;
-use App\Models\ProductManufacturing;
-use App\Models\ProductRecipeStock;
 use App\Models\StartShift;
 use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
+use App\Services\ProductManufacturingService;
 use App\Services\QrCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -575,54 +573,10 @@ class CashierOrderController extends Controller
                     }
                 }
 
-                // Deduct from branch stock for product ingredients based on ProductManufacturing
-                if ($branchId) {
-                    $spec = ProductManufacturing::with([
-                        'productRecipeManufacturings.material',
-                        'productRecipeManufacturings.productRecipe',
-                    ])
-                        ->where('product_id', $cart->product_id)
-                        ->latest('id')
-                        ->first();
-
-                    if ($spec) {
-                        foreach ($spec->productRecipeManufacturings as $recipeItem) {
-                            $requiredQty = (float) $recipeItem->count * $qty;
-                            if ($requiredQty <= 0) {
-                                continue;
-                            }
-
-                            if (! empty($recipeItem->material_id)) {
-                                $matStock = MaterialStock::where('material_id', $recipeItem->material_id)
-                                    ->where('branch_id', $branchId)
-                                    ->lockForUpdate()
-                                    ->first();
-
-                                if ($matStock) {
-                                    $current = (float) $matStock->stock;
-                                    // Stock must not drop below 0: if stock is 9 and recipe needs 10, deduct only 9
-                                    $deduct = min(max(0.0, $current), $requiredQty);
-                                    if ($deduct > 0) {
-                                        $matStock->decrement('stock', $deduct);
-                                    }
-                                }
-                            } elseif (! empty($recipeItem->product_recipe_id)) {
-                                $recStock = ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
-                                    ->where('branch_id', $branchId)
-                                    ->lockForUpdate()
-                                    ->first();
-
-                                if ($recStock) {
-                                    $current = (float) $recStock->stock;
-                                    // Stock must not drop below 0: if stock is 9 and recipe needs 10, deduct only 9
-                                    $deduct = min(max(0.0, $current), $requiredQty);
-                                    if ($deduct > 0) {
-                                        $recStock->decrement('stock', $deduct);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                // Deduct from branch stock for product ingredients if not dine-in.
+                // Dine-in orders have already had their stock deducted upon dispatch to kitchen.
+                if ($branchId && $order->module !== 'dinein') {
+                    ProductManufacturingService::deductStockForCartItem($cart, $branchId);
                 }
             }
 

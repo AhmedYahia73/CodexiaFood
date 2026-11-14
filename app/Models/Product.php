@@ -70,7 +70,9 @@ class Product extends Model
 
     public function productManufacturing(): HasOne
     {
-        return $this->hasOne(ProductManufacturing::class)->latestOfMany();
+        return $this->hasOne(ProductManufacturing::class)
+            ->whereNull('option_combination_key')
+            ->latestOfMany();
     }
 
     public function manufacturingLists(): HasMany

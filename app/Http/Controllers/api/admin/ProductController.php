@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductResource;
+use App\Models\Option;
 use App\Models\Product;
 use App\Services\ProductManufacturingService;
 use App\trait\image;
@@ -11,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
@@ -123,7 +125,7 @@ class ProductController extends Controller
             'variations.*.options.*.status' => 'nullable|boolean',
 
             /**
-             * Manufacturing recipes / ingredients specification list.
+             * Manufacturing recipes / ingredients (product-level, for products without options).
              *
              * @var array|null
              */
@@ -132,6 +134,20 @@ class ProductController extends Controller
             'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
             'recipes.*.count' => 'required_with:recipes|integer|min:1',
             'recipes.*.unit_id' => 'required_with:recipes|integer|exists:units,id',
+
+            /**
+             * Manufacturing recipes per option combination (for products with variations).
+             *
+             * @var array|null
+             */
+            'option_recipes' => 'nullable|array',
+            'option_recipes.*.option_ids' => 'required|array|min:1',
+            'option_recipes.*.option_ids.*' => 'integer',
+            'option_recipes.*.recipes' => 'required|array|min:1',
+            'option_recipes.*.recipes.*.material_id' => 'nullable|exists:materials,id|required_without:option_recipes.*.recipes.*.product_recipe_id',
+            'option_recipes.*.recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:option_recipes.*.recipes.*.material_id',
+            'option_recipes.*.recipes.*.count' => 'required|integer|min:1',
+            'option_recipes.*.recipes.*.unit_id' => 'nullable|integer|exists:units,id',
         ]);
 
         $imagePath = $request->hasFile('image')
@@ -172,7 +188,10 @@ class ProductController extends Controller
                 }
             }
 
-            if ($request->has('recipes')) {
+            if ($request->has('option_recipes') && ! empty($validated['option_recipes'])) {
+                $this->validateAllCombinationsCovered($product, $validated['option_recipes']);
+                ProductManufacturingService::syncOptionRecipesForProduct($product, $validated['option_recipes']);
+            } elseif ($request->has('recipes')) {
                 ProductManufacturingService::syncForProduct($product, $validated['recipes'] ?? []);
             }
 
@@ -240,7 +259,7 @@ class ProductController extends Controller
             'variations.*.options.*.status' => 'nullable|boolean',
 
             /**
-             * Manufacturing recipes / ingredients specification list.
+             * Manufacturing recipes / ingredients (product-level, for products without options).
              *
              * @var array|null
              */
@@ -249,6 +268,20 @@ class ProductController extends Controller
             'recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:recipes.*.material_id',
             'recipes.*.count' => 'required_with:recipes|integer|min:1',
             'recipes.*.unit_id' => 'required_with:recipes|integer|exists:units,id',
+
+            /**
+             * Manufacturing recipes per option combination (for products with variations).
+             *
+             * @var array|null
+             */
+            'option_recipes' => 'nullable|array',
+            'option_recipes.*.option_ids' => 'required|array|min:1',
+            'option_recipes.*.option_ids.*' => 'integer',
+            'option_recipes.*.recipes' => 'required|array|min:1',
+            'option_recipes.*.recipes.*.material_id' => 'nullable|exists:materials,id|required_without:option_recipes.*.recipes.*.product_recipe_id',
+            'option_recipes.*.recipes.*.product_recipe_id' => 'nullable|exists:product_recipes,id|required_without:option_recipes.*.recipes.*.material_id',
+            'option_recipes.*.recipes.*.count' => 'required|integer|min:1',
+            'option_recipes.*.recipes.*.unit_id' => 'nullable|integer|exists:units,id',
         ]);
 
         DB::transaction(function () use ($request, $validated, $product) {
@@ -318,7 +351,12 @@ class ProductController extends Controller
                 }
             }
 
-            if ($request->has('recipes')) {
+            if ($request->has('option_recipes') && ! empty($validated['option_recipes'])) {
+                // Refresh variations from DB after potential update above
+                $product->load('variations.options');
+                $this->validateAllCombinationsCovered($product, $validated['option_recipes']);
+                ProductManufacturingService::syncOptionRecipesForProduct($product, $validated['option_recipes']);
+            } elseif ($request->has('recipes')) {
                 ProductManufacturingService::syncForProduct($product, $validated['recipes'] ?? []);
             }
         });
@@ -358,6 +396,52 @@ class ProductController extends Controller
     private function getSelectOptions(): array
     {
         return ProductManufacturingService::getSelectOptions();
+    }
+
+    /**
+     * Validate that all possible option combinations are covered.
+     *
+     * @param  array<int, array{option_ids: array<int, int>, recipes: array}>  $optionRecipes
+     *
+     * @throws ValidationException
+     */
+    private function validateAllCombinationsCovered(Product $product, array $optionRecipes): void
+    {
+        $allCombinations = ProductManufacturingService::getAllCombinations($product);
+
+        if (empty($allCombinations)) {
+            return; // Product has no variations with options; nothing to validate.
+        }
+
+        $expectedKeys = collect($allCombinations)
+            ->map(fn ($combo) => ProductManufacturingService::buildCombinationKey($combo))
+            ->sort()
+            ->values();
+
+        $providedKeys = collect($optionRecipes)
+            ->map(fn ($cr) => ProductManufacturingService::buildCombinationKey($cr['option_ids'] ?? []))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        $missingKeys = $expectedKeys->diff($providedKeys);
+
+        if ($missingKeys->isNotEmpty()) {
+            $missingDescriptions = $missingKeys->map(function (string $key) {
+                $optionIds = explode(',', $key);
+                $optionNames = Option::whereIn('id', $optionIds)
+                    ->get()
+                    ->map(fn ($o) => is_array($o->name) ? ($o->name['ar'] ?? $o->name['en'] ?? $o->id) : $o->name)
+                    ->implode(' + ');
+
+                return $optionNames ?: $key;
+            })->implode(', ');
+
+            throw ValidationException::withMessages([
+                'option_recipes' => "يجب تحديد الوصفة لجميع مجموعات الاختيارات. المجموعات الناقصة: {$missingDescriptions}",
+            ]);
+        }
     }
 
     /**
@@ -434,6 +518,19 @@ class ProductController extends Controller
             }
             if (is_array($recipes)) {
                 $dataToMerge['recipes'] = $recipes;
+            }
+        }
+
+        if ($request->has('option_recipes')) {
+            $optionRecipes = $request->input('option_recipes');
+            if (is_string($optionRecipes)) {
+                $decoded = json_decode($optionRecipes, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $optionRecipes = $decoded;
+                }
+            }
+            if (is_array($optionRecipes)) {
+                $dataToMerge['option_recipes'] = $optionRecipes;
             }
         }
 

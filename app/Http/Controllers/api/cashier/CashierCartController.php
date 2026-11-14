@@ -6,15 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\BusinessSetup;
 use App\Models\Cashier;
 use App\Models\Discount;
-use App\Models\MaterialStock;
 use App\Models\OrderAddonCart;
 use App\Models\OrderCart;
 use App\Models\OrderVariationCart;
-use App\Models\ProductManufacturing;
-use App\Models\ProductRecipeStock;
 use App\Services\KitchenDispatchService;
 use App\Services\PriceCalculatorService;
-use Illuminate\Database\Eloquent\Builder;
+use App\Services\ProductManufacturingService;
+use App\trait\CashierCartScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -22,82 +20,11 @@ use Illuminate\Support\Facades\DB;
 
 class CashierCartController extends Controller
 {
+    use CashierCartScope;
+
     public function __construct(
         protected PriceCalculatorService $priceCalculator
     ) {}
-
-    private function getLocale(Request $request): string
-    {
-        $lang = $request->query('lang')
-            ?? $request->header('Accept-Language')
-            ?? $request->header('lang')
-            ?? app()->getLocale();
-
-        return str_starts_with(strtolower((string) $lang), 'en') ? 'en' : 'ar';
-    }
-
-    private function getCartScopeKey(string $module, ?int $tableId, ?int $cashierId): string
-    {
-        if ($module === 'dinein') {
-            return "cashier_cart_discount:dinein:table_{$tableId}";
-        }
-
-        return "cashier_cart_discount:{$module}:cashier_{$cashierId}";
-    }
-
-    private function getTaxScopeKey(string $module, ?int $tableId, ?int $cashierId): string
-    {
-        if ($module === 'dinein') {
-            return "cashier_cart_without_tax:dinein:table_{$tableId}";
-        }
-
-        return "cashier_cart_without_tax:{$module}:cashier_{$cashierId}";
-    }
-
-    private function resolveWithoutTax(Request $request, string $module, ?int $tableId, ?int $cashierId): bool
-    {
-        $hasTaxParam = $request->has('without_tax')
-            || $request->has('no_tax')
-            || $request->has('cancel_tax')
-            || $request->has('exclude_tax');
-
-        $scopeKey = $this->getTaxScopeKey($module, $tableId, $cashierId);
-
-        if ($hasTaxParam) {
-            $withoutTax = $request->boolean('without_tax')
-                || $request->boolean('no_tax')
-                || $request->boolean('cancel_tax')
-                || $request->boolean('exclude_tax');
-
-            Cache::put($scopeKey, $withoutTax, now()->addHours(12));
-
-            return $withoutTax;
-        }
-
-        return (bool) Cache::get($scopeKey, false);
-    }
-
-    private function cartQuery(?int $cashierId, ?int $tableId = null): Builder
-    {
-        return OrderCart::with([
-            'hallTable.hall',
-            'product.discount',
-            'product.tax',
-            'discount',
-            'variationCarts.variation',
-            'addonCarts.addon.discount',
-            'addonCarts.addon.tax',
-        ])->when($tableId, function ($query, $tableId) {
-            // عند تحديد الطاولة: جلب كافة عناصر سلة الطاولة بغض النظر عن الكاشير
-            $query->where('hall_table_id', $tableId);
-        }, function ($query) use ($cashierId) {
-            // في حالة عدم تحديد طاولة (سفري / دليفري): الفلترة حسب الكاشير الحالي
-            $query->where(function ($q) use ($cashierId) {
-                $q->where('cashier_id', $cashierId)
-                    ->orWhereNull('cashier_id');
-            });
-        });
-    }
 
     /**
      * Get all cart items for current cashier, with calculation and grand totals.
@@ -345,73 +272,24 @@ class CashierCartController extends Controller
         // Check stock of recipe ingredients unless without_recipe is true
         $withoutRecipe = $request->boolean('without_recipe');
         if (! $withoutRecipe && $branchId) {
-            $spec = ProductManufacturing::with([
-                'productRecipeManufacturings.material',
-                'productRecipeManufacturings.productRecipe',
-            ])
-                ->where('product_id', $validated['product_id'])
-                ->latest('id')
-                ->first();
+            $combinationKey = null;
+            if (! empty($validated['variations'])) {
+                $allOptionIds = collect($validated['variations'])
+                    ->flatMap(fn ($v) => $v['option_ids'] ?? [])
+                    ->all();
+                $combinationKey = ProductManufacturingService::buildCombinationKey($allOptionIds);
+            }
 
-            if ($spec && $spec->productRecipeManufacturings->isNotEmpty()) {
-                $requestedQty = max(1, (int) ($validated['quantity'] ?? 1)) * ($hasGift ? 2 : 1);
+            $requestedQty = max(1, (int) ($validated['quantity'] ?? 1)) * ($hasGift ? 2 : 1);
+            $stockError = ProductManufacturingService::checkStockAvailability(
+                $validated['product_id'],
+                $requestedQty,
+                $branchId,
+                $combinationKey
+            );
 
-                foreach ($spec->productRecipeManufacturings as $recipeItem) {
-                    $requiredQty = (float) $recipeItem->count * $requestedQty;
-                    if ($requiredQty <= 0) {
-                        continue;
-                    }
-
-                    if (! empty($recipeItem->material_id)) {
-                        $currentStock = (float) (MaterialStock::where('material_id', $recipeItem->material_id)
-                            ->where('branch_id', $branchId)
-                            ->value('stock') ?? 0);
-
-                        if ($currentStock < $requiredQty) {
-                            $matName = $recipeItem->material?->name;
-                            $name = is_array($matName)
-                                ? ($matName['ar'] ?? $matName['en'] ?? "مادة خام #{$recipeItem->material_id}")
-                                : ($matName ?? "مادة خام #{$recipeItem->material_id}");
-
-                            return response()->json([
-                                'status' => false,
-                                'message' => "المخزون المتوفر للمادة الخام ({$name}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQty}.",
-                                'insufficient_ingredient' => [
-                                    'type' => 'material',
-                                    'id' => $recipeItem->material_id,
-                                    'name' => $name,
-                                    'available_stock' => $currentStock,
-                                    'required_quantity' => $requiredQty,
-                                    'can_bypass' => true,
-                                ],
-                            ], 422);
-                        }
-                    } elseif (! empty($recipeItem->product_recipe_id)) {
-                        $currentStock = (float) (ProductRecipeStock::where('product_recipe_id', $recipeItem->product_recipe_id)
-                            ->where('branch_id', $branchId)
-                            ->value('stock') ?? 0);
-
-                        if ($currentStock < $requiredQty) {
-                            $recName = $recipeItem->productRecipe?->name;
-                            $name = is_array($recName)
-                                ? ($recName['ar'] ?? $recName['en'] ?? "وصفة #{$recipeItem->product_recipe_id}")
-                                : ($recName ?? "وصفة #{$recipeItem->product_recipe_id}");
-
-                            return response()->json([
-                                'status' => false,
-                                'message' => "المخزون المتوفر للوصفة ({$name}) في هذا الفرع غير كافٍ. المتاح: {$currentStock}، المطلوب: {$requiredQty}.",
-                                'insufficient_ingredient' => [
-                                    'type' => 'product_recipe',
-                                    'id' => $recipeItem->product_recipe_id,
-                                    'name' => $name,
-                                    'available_stock' => $currentStock,
-                                    'required_quantity' => $requiredQty,
-                                    'can_bypass' => true,
-                                ],
-                            ], 422);
-                        }
-                    }
-                }
+            if ($stockError) {
+                return response()->json($stockError, 422);
             }
         }
 
@@ -511,6 +389,7 @@ class CashierCartController extends Controller
 
                 if ($giftCart->module === 'dinein') {
                     app(KitchenDispatchService::class)->dispatchFromCart($giftCart);
+                    ProductManufacturingService::deductStockForCartItem($giftCart, $branchId);
                 }
             }
 
@@ -530,6 +409,7 @@ class CashierCartController extends Controller
 
         if ($cart->module === 'dinein') {
             app(KitchenDispatchService::class)->dispatchFromCart($cart);
+            ProductManufacturingService::deductStockForCartItem($cart, $branchId);
         }
 
         return response()->json([

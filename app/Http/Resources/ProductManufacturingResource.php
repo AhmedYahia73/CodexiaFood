@@ -19,6 +19,7 @@ class ProductManufacturingResource extends JsonResource
         return [
             'id' => $this->id,
             'product_id' => $this->product_id,
+            'option_combination_key' => $this->option_combination_key,
             'product' => $this->relationLoaded('product') && $this->product ? [
                 'id' => $this->product->id,
                 'name' => $this->product->name,
